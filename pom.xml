@@ -92,6 +92,12 @@
             <artifactId>polly</artifactId>
             <version>${aws-sdk.version}</version>
         </dependency>
+        
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>transcribe</artifactId>
+            <version>${aws-sdk.version}</version>
+        </dependency>
 
         <!-- File Processing -->
         <dependency>

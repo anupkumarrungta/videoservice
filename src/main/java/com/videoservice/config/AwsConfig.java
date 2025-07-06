@@ -10,6 +10,7 @@ import software.amazon.awssdk.services.polly.PollyClient;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.transcribe.TranscribeClient;
 import software.amazon.awssdk.services.translate.TranslateClient;
 
 /**
@@ -101,6 +102,20 @@ public class AwsConfig {
     @Bean
     public PollyClient pollyClient() {
         return PollyClient.builder()
+                .region(Region.of(region))
+                .credentialsProvider(StaticCredentialsProvider.create(
+                        AwsBasicCredentials.create(accessKey, secretKey)))
+                .build();
+    }
+    
+    /**
+     * Configure Transcribe client for speech-to-text.
+     * 
+     * @return TranscribeClient instance
+     */
+    @Bean
+    public TranscribeClient transcribeClient() {
+        return TranscribeClient.builder()
                 .region(Region.of(region))
                 .credentialsProvider(StaticCredentialsProvider.create(
                         AwsBasicCredentials.create(accessKey, secretKey)))

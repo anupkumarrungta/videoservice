@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Translation Job Completed</title>
+</head>
+<body>
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #2c3e50;">🎉 Translation Job Completed!</h2>
+        
+        <p>Hello <span th:text="${userEmail}">user</span>,</p>
+        
+        <p>Your video translation job has been completed successfully!</p>
+        
+        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <h3 style="margin-top: 0; color: #495057;">Job Details:</h3>
+            <ul style="list-style: none; padding: 0;">
+                <li><strong>Job ID:</strong> <span th:text="${jobId}">job-id</span></li>
+                <li><strong>Original File:</strong> <span th:text="${originalFilename}">filename</span></li>
+                <li><strong>Source Language:</strong> <span th:text="${sourceLanguage}">source</span></li>
+                <li><strong>Target Languages:</strong> <span th:text="${targetLanguages}">target</span></li>
+                <li><strong>Completed At:</strong> <span th:text="${completedAt}">timestamp</span></li>
+            </ul>
+        </div>
+        
+        <div th:if="${not #lists.isEmpty(downloadUrls)}">
+            <h3 style="color: #28a745;">📥 Download Your Translated Videos:</h3>
+            <div style="margin: 15px 0;">
+                <div th:each="entry : ${downloadUrls}" style="margin: 10px 0; padding: 10px; border: 1px solid #dee2e6; border-radius: 5px;">
+                    <strong th:text="${entry.key}">Language</strong>: 
+                    <a th:href="${entry.value}" style="color: #007bff; text-decoration: none;">Download Video</a>
+                </div>
+            </div>
+        </div>
+        
+        <div style="margin-top: 30px; padding: 15px; background-color: #e9ecef; border-radius: 5px;">
+            <p style="margin: 0; font-size: 14px; color: #6c757d;">
+                Thank you for using our Video Translation Service!<br>
+                If you have any questions, please don't hesitate to contact us.
+            </p>
+        </div>
+    </div>
+</body>
+</html> 

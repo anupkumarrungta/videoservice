@@ -265,13 +265,70 @@ public class VideoTranslationController {
     }
     
     /**
+     * Download a translated video file directly.
+     * 
+     * @param jobId The job ID
+     * @param language The target language
+     * @return Video file as resource
+     */
+    @GetMapping("/job/{jobId}/download/{language}")
+    public ResponseEntity<Resource> downloadTranslatedVideo(
+            @PathVariable UUID jobId,
+            @PathVariable String language) {
+        
+        logger.debug("Downloading translated video for job: {} language: {}", jobId, language);
+        
+        return jobRepository.findById(jobId)
+                .map(job -> {
+                    if (job.getStatus() != JobStatus.COMPLETED) {
+                        throw new RuntimeException("Job is not completed");
+                    }
+                    
+                    // Find the translation result for the language
+                    TranslationResult result = job.getTranslationResults().stream()
+                            .filter(r -> r.getTargetLanguage().equalsIgnoreCase(language))
+                            .findFirst()
+                            .orElse(null);
+                    
+                    if (result == null || result.getS3VideoKey() == null) {
+                        throw new RuntimeException("Translation result not found");
+                    }
+                    
+                    try {
+                        // Check if it's a local file (contains job ID in the key)
+                        if (result.getS3VideoKey().contains(jobId.toString())) {
+                            // Local file
+                            File localFile = localStorageService.getFile(result.getS3VideoKey());
+                            org.springframework.core.io.Resource resource = 
+                                new org.springframework.core.io.FileSystemResource(localFile);
+                            
+                            return ResponseEntity.ok()
+                                    .header("Content-Disposition", "attachment; filename=\"" + 
+                                           job.getOriginalFilename().replaceFirst("[.][^.]+$", "") + 
+                                           "_" + language + ".mp4\"")
+                                    .contentType(org.springframework.http.MediaType.APPLICATION_OCTET_STREAM)
+                                    .body(resource);
+                        } else {
+                            // S3 file - generate presigned URL
+                            String downloadUrl = s3StorageService.getPresignedDownloadUrl(result.getS3VideoKey(), 60);
+                            throw new RuntimeException("S3 download not implemented in this endpoint. Use /job/{jobId}/download-url/{language} for S3 files.");
+                        }
+                    } catch (Exception e) {
+                        logger.error("Failed to download file: {}", e.getMessage());
+                        throw new RuntimeException("Failed to download file: " + e.getMessage());
+                    }
+                })
+                .orElseThrow(() -> new RuntimeException("Job not found"));
+    }
+    
+    /**
      * Get download URL for a translated video.
      * 
      * @param jobId The job ID
      * @param language The target language
-     * @return Download URL
+     * @return Download URL and metadata
      */
-    @GetMapping("/job/{jobId}/download/{language}")
+    @GetMapping("/job/{jobId}/download-url/{language}")
     public ResponseEntity<Map<String, String>> getDownloadUrl(
             @PathVariable UUID jobId,
             @PathVariable String language) {
@@ -289,8 +346,23 @@ public class VideoTranslationController {
                         
                         if (result != null && result.getS3VideoKey() != null) {
                             try {
-                                String downloadUrl = s3StorageService.getPresignedDownloadUrl(result.getS3VideoKey(), 60); // 1 hour
-                                return ResponseEntity.ok(Map.of("downloadUrl", downloadUrl));
+                                // Check if it's a local file
+                                if (result.getS3VideoKey().contains(jobId.toString())) {
+                                    // Local file - return direct download path
+                                    String localPath = localStorageService.getFilePath(result.getS3VideoKey()).toString();
+                                    return ResponseEntity.ok(Map.of(
+                                        "downloadUrl", "/api/v1/translation/job/" + jobId + "/download/" + language,
+                                        "localPath", localPath,
+                                        "storageType", "local"
+                                    ));
+                                } else {
+                                    // S3 file
+                                    String downloadUrl = s3StorageService.getPresignedDownloadUrl(result.getS3VideoKey(), 60);
+                                    return ResponseEntity.ok(Map.of(
+                                        "downloadUrl", downloadUrl,
+                                        "storageType", "s3"
+                                    ));
+                                }
                             } catch (Exception e) {
                                 logger.error("Failed to generate download URL: {}", e.getMessage());
                                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -401,8 +473,15 @@ public class VideoTranslationController {
         // Generate download URL if completed
         if (result.getStatus() == TranslationStatus.COMPLETED && result.getS3VideoKey() != null) {
             try {
-                String downloadUrl = s3StorageService.getPresignedDownloadUrl(result.getS3VideoKey(), 60);
-                response.setDownloadUrl(downloadUrl);
+                // Check if it's a local file
+                if (result.getS3VideoKey().contains(result.getTranslationJob().getId().toString())) {
+                    // Local file
+                    response.setDownloadUrl("/api/v1/translation/job/" + result.getTranslationJob().getId() + "/download/" + result.getTargetLanguage());
+                } else {
+                    // S3 file
+                    String downloadUrl = s3StorageService.getPresignedDownloadUrl(result.getS3VideoKey(), 60);
+                    response.setDownloadUrl(downloadUrl);
+                }
             } catch (Exception e) {
                 logger.warn("Failed to generate download URL for result: {}", result.getId());
             }

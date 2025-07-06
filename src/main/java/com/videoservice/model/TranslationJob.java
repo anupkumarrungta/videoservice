@@ -79,6 +79,7 @@ public class TranslationJob {
         this.progressPercentage = 0;
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
+        this.translationResults = new java.util.ArrayList<>();
     }
     
     public TranslationJob(String originalFilename, String sourceLanguage, 

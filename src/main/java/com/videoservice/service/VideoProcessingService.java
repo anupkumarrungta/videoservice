@@ -247,6 +247,18 @@ public class VideoProcessingService {
     }
     
     /**
+     * Extract audio from video file (alias for extractAudio).
+     * 
+     * @param videoFile The video file
+     * @param outputAudioFile The output audio file
+     * @return The extracted audio file
+     * @throws IOException if extraction fails
+     */
+    public File extractAudioFromVideo(File videoFile, File outputAudioFile) throws IOException {
+        return extractAudio(videoFile, outputAudioFile);
+    }
+    
+    /**
      * Split audio into chunks of specified duration.
      * 
      * @param audioFile The input audio file

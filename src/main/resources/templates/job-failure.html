@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Translation Job Failed</title>
+</head>
+<body>
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #dc3545;">❌ Translation Job Failed</h2>
+        
+        <p>Hello <span th:text="${userEmail}">user</span>,</p>
+        
+        <p>We're sorry, but your video translation job has failed during processing.</p>
+        
+        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <h3 style="margin-top: 0; color: #495057;">Job Details:</h3>
+            <ul style="list-style: none; padding: 0;">
+                <li><strong>Job ID:</strong> <span th:text="${jobId}">job-id</span></li>
+                <li><strong>Original File:</strong> <span th:text="${originalFilename}">filename</span></li>
+                <li><strong>Source Language:</strong> <span th:text="${sourceLanguage}">source</span></li>
+                <li><strong>Target Languages:</strong> <span th:text="${targetLanguages}">target</span></li>
+                <li><strong>Failed At:</strong> <span th:text="${updatedAt}">timestamp</span></li>
+            </ul>
+        </div>
+        
+        <div style="background-color: #f8d7da; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <h4 style="margin-top: 0; color: #721c24;">Error Details:</h4>
+            <p style="margin: 0; color: #721c24;">
+                <strong>Error Message:</strong> <span th:text="${errorMessage}">error details</span>
+            </p>
+        </div>
+        
+        <div style="background-color: #d1ecf1; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <h4 style="margin-top: 0; color: #0c5460;">What You Can Do:</h4>
+            <ul style="color: #0c5460;">
+                <li>Check if your video file is in a supported format (MP4, AVI, MOV, MKV, WMV)</li>
+                <li>Ensure the video file is not corrupted</li>
+                <li>Try uploading the file again</li>
+                <li>Contact support if the issue persists</li>
+            </ul>
+        </div>
+        
+        <div style="margin-top: 30px; padding: 15px; background-color: #e9ecef; border-radius: 5px;">
+            <p style="margin: 0; font-size: 14px; color: #6c757d;">
+                We apologize for the inconvenience. If you need assistance, please contact our support team.
+            </p>
+        </div>
+    </div>
+</body>
+</html> 

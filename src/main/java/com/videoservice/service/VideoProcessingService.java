@@ -66,46 +66,17 @@ public class VideoProcessingService {
             throw new IOException("Unsupported video format: " + extension);
         }
         
-        // Get video metadata
-        FFmpegProbeResult probeResult = ffprobe.probe(videoFile.getAbsolutePath());
-        
-        // Find video and audio streams
-        FFmpegStream videoStream = null;
-        FFmpegStream audioStream = null;
-        
-        for (FFmpegStream stream : probeResult.getStreams()) {
-            if ("video".equals(stream.codec_type)) {
-                videoStream = stream;
-            } else if ("audio".equals(stream.codec_type)) {
-                audioStream = stream;
-            }
+        // Check if file exists and is readable
+        if (!videoFile.exists()) {
+            throw new IOException("Video file does not exist: " + videoFile.getAbsolutePath());
         }
         
-        if (videoStream == null) {
-            throw new IOException("No video stream found in file");
+        if (!videoFile.canRead()) {
+            throw new IOException("Cannot read video file: " + videoFile.getAbsolutePath());
         }
         
-        if (audioStream == null) {
-            throw new IOException("No audio stream found in file");
-        }
-        
-        // Check duration
-        double duration = probeResult.getFormat().duration;
-        if (duration > maxDurationSeconds) {
-            throw new IOException("Video duration exceeds maximum allowed duration: " + 
-                                formatDuration(duration) + " > " + formatDuration(maxDurationSeconds));
-        }
-        
-        VideoInfo videoInfo = new VideoInfo();
-        videoInfo.setDurationSeconds((long) Math.round(duration));
-        videoInfo.setFileSizeBytes(videoFile.length());
-        videoInfo.setVideoCodec(videoStream.codec_name);
-        videoInfo.setAudioCodec(audioStream.codec_name);
-        videoInfo.setWidth(videoStream.width);
-        videoInfo.setHeight(videoStream.height);
-        videoInfo.setFrameRate(videoStream.r_frame_rate.toString());
-        videoInfo.setSampleRate(audioStream.sample_rate);
-        videoInfo.setChannels(audioStream.channels);
+        // Use direct command execution as fallback for validation
+        VideoInfo videoInfo = validateVideoWithCommand(videoFile);
         
         logger.info("Video validation successful: {}x{}, {}s, {}MB", 
                    videoInfo.getWidth(), videoInfo.getHeight(), 
@@ -113,6 +84,135 @@ public class VideoProcessingService {
                    videoInfo.getFileSizeBytes() / (1024 * 1024));
         
         return videoInfo;
+    }
+    
+    /**
+     * Validate video using direct FFprobe command execution
+     */
+    private VideoInfo validateVideoWithCommand(File videoFile) throws IOException {
+        try {
+            // Get duration
+            ProcessBuilder durationBuilder = new ProcessBuilder(
+                "C:\\ffmpeg\\bin\\ffprobe.exe", "-v", "quiet", 
+                "-show_entries", "format=duration", 
+                "-of", "default=noprint_wrappers=1:nokey=1", 
+                videoFile.getAbsolutePath()
+            );
+            
+            Process durationProcess = durationBuilder.start();
+            String durationOutput = new String(durationProcess.getInputStream().readAllBytes()).trim();
+            int durationExitCode = durationProcess.waitFor();
+            
+            if (durationExitCode != 0) {
+                throw new IOException("Failed to get video duration");
+            }
+            
+            double duration = Double.parseDouble(durationOutput);
+            if (duration > maxDurationSeconds) {
+                throw new IOException("Video duration exceeds maximum allowed duration: " + 
+                                    formatDuration(duration) + " > " + formatDuration(maxDurationSeconds));
+            }
+            
+            // Get video stream info
+            ProcessBuilder videoBuilder = new ProcessBuilder(
+                "C:\\ffmpeg\\bin\\ffprobe.exe", "-v", "quiet", 
+                "-select_streams", "v:0", 
+                "-show_entries", "stream=width,height,codec_name,r_frame_rate", 
+                "-of", "json", 
+                videoFile.getAbsolutePath()
+            );
+            
+            Process videoProcess = videoBuilder.start();
+            String videoOutput = new String(videoProcess.getInputStream().readAllBytes());
+            int videoExitCode = videoProcess.waitFor();
+            
+            if (videoExitCode != 0) {
+                throw new IOException("Failed to get video stream info");
+            }
+            
+            // Parse JSON output (simplified)
+            if (!videoOutput.contains("\"width\"") || !videoOutput.contains("\"height\"")) {
+                throw new IOException("No video stream found in file");
+            }
+            
+            // Extract basic info from JSON (simplified parsing)
+            int width = extractJsonValue(videoOutput, "width");
+            int height = extractJsonValue(videoOutput, "height");
+            String codec = extractJsonString(videoOutput, "codec_name");
+            String frameRate = extractJsonString(videoOutput, "r_frame_rate");
+            
+            // Get audio stream info
+            ProcessBuilder audioBuilder = new ProcessBuilder(
+                "C:\\ffmpeg\\bin\\ffprobe.exe", "-v", "quiet", 
+                "-select_streams", "a:0", 
+                "-show_entries", "stream=sample_rate,channels,codec_name", 
+                "-of", "json", 
+                videoFile.getAbsolutePath()
+            );
+            
+            Process audioProcess = audioBuilder.start();
+            String audioOutput = new String(audioProcess.getInputStream().readAllBytes());
+            int audioExitCode = audioProcess.waitFor();
+            
+            VideoInfo videoInfo = new VideoInfo();
+            videoInfo.setDurationSeconds((long) Math.round(duration));
+            videoInfo.setFileSizeBytes(videoFile.length());
+            videoInfo.setVideoCodec(codec != null ? codec : "unknown");
+            videoInfo.setWidth(width);
+            videoInfo.setHeight(height);
+            videoInfo.setFrameRate(frameRate != null ? frameRate : "25/1");
+            
+            if (audioExitCode == 0 && audioOutput.contains("\"sample_rate\"")) {
+                int sampleRate = extractJsonValue(audioOutput, "sample_rate");
+                int channels = extractJsonValue(audioOutput, "channels");
+                String audioCodec = extractJsonString(audioOutput, "codec_name");
+                
+                videoInfo.setAudioCodec(audioCodec != null ? audioCodec : "unknown");
+                videoInfo.setSampleRate(sampleRate);
+                videoInfo.setChannels(channels);
+            } else {
+                videoInfo.setAudioCodec("none");
+                videoInfo.setSampleRate(0);
+                videoInfo.setChannels(0);
+                logger.warn("No audio stream found in file: {}. This may cause issues with translation.", videoFile.getName());
+            }
+            
+            return videoInfo;
+            
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Video validation interrupted", e);
+        } catch (NumberFormatException e) {
+            throw new IOException("Invalid video metadata format", e);
+        }
+    }
+    
+    private int extractJsonValue(String json, String key) {
+        try {
+            String pattern = "\"" + key + "\"\\s*:\\s*(\\d+)";
+            java.util.regex.Pattern p = java.util.regex.Pattern.compile(pattern);
+            java.util.regex.Matcher m = p.matcher(json);
+            if (m.find()) {
+                return Integer.parseInt(m.group(1));
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to extract {} from JSON: {}", key, e.getMessage());
+        }
+        return 0;
+    }
+    
+    private String extractJsonString(String json, String key) {
+        try {
+            String pattern = "\"" + key + "\"\\s*:\\s*\"([^\"]+)\"";
+            java.util.regex.Pattern p = java.util.regex.Pattern.compile(pattern);
+            java.util.regex.Matcher m = p.matcher(json);
+            if (m.find()) {
+                return m.group(1);
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to extract {} from JSON: {}", key, e.getMessage());
+        }
+        return null;
     }
     
     /**

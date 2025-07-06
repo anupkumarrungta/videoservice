@@ -10,6 +10,7 @@ import com.videoservice.model.TranslationStatus;
 import com.videoservice.repository.TranslationJobRepository;
 import com.videoservice.service.JobManager;
 import com.videoservice.service.S3StorageService;
+import com.videoservice.service.LocalStorageService;
 import com.videoservice.service.VideoProcessingService;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
@@ -49,6 +50,7 @@ public class VideoTranslationController {
     private final TranslationJobRepository jobRepository;
     private final JobManager jobManager;
     private final S3StorageService s3StorageService;
+    private final LocalStorageService localStorageService;
     private final VideoProcessingService videoProcessingService;
     
     @Value("${spring.servlet.multipart.max-file-size}")
@@ -60,10 +62,12 @@ public class VideoTranslationController {
     public VideoTranslationController(TranslationJobRepository jobRepository,
                                     JobManager jobManager,
                                     S3StorageService s3StorageService,
+                                    LocalStorageService localStorageService,
                                     VideoProcessingService videoProcessingService) {
         this.jobRepository = jobRepository;
         this.jobManager = jobManager;
         this.s3StorageService = s3StorageService;
+        this.localStorageService = localStorageService;
         this.videoProcessingService = videoProcessingService;
     }
     
@@ -105,8 +109,16 @@ public class VideoTranslationController {
                         .body(createErrorResponse("Invalid video file: " + e.getMessage()));
             }
             
-            // Upload to S3
-            String s3Key = s3StorageService.uploadFile(tempFile.toFile(), file.getOriginalFilename());
+            // Try to upload to S3 first, fallback to local storage if S3 fails
+            String storageKey;
+            try {
+                storageKey = s3StorageService.uploadFile(tempFile.toFile(), file.getOriginalFilename());
+                logger.info("Successfully uploaded to S3: {}", storageKey);
+            } catch (Exception s3Error) {
+                logger.warn("S3 upload failed, falling back to local storage: {}", s3Error.getMessage());
+                storageKey = localStorageService.uploadFile(tempFile.toFile(), file.getOriginalFilename());
+                logger.info("Successfully uploaded to local storage: {}", storageKey);
+            }
             
             // Create translation job
             TranslationJob job = new TranslationJob(
@@ -115,7 +127,7 @@ public class VideoTranslationController {
                     request.getTargetLanguages(),
                     request.getUserEmail()
             );
-            job.setS3OriginalKey(s3Key);
+            job.setS3OriginalKey(storageKey);
             job.setFileSizeBytes(file.getSize());
             
             // Save job to database

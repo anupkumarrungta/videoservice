@@ -1,0 +1,89 @@
+# Test configuration
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: password
+  
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+  
+  h2:
+    console:
+      enabled: false
+
+# AWS Configuration for testing
+aws:
+  region: us-east-1
+  credentials:
+    access-key: test-access-key
+    secret-key: test-secret-key
+  
+  s3:
+    bucket-name: test-video-translation-bucket
+    endpoint: http://localhost:9000
+    force-path-style: true
+
+# Translation Service Configuration
+translation:
+  aws:
+    source-language: auto
+    target-languages:
+      - english
+      - arabic
+      - korean
+      - chinese
+      - tamil
+      - hindi
+
+# Audio Processing Configuration
+audio:
+  chunk-duration: 180
+  sample-rate: 16000
+  bit-rate: 128000
+  format: mp3
+
+# Video Processing Configuration
+video:
+  supported-formats:
+    - mp4
+    - avi
+    - mov
+    - mkv
+    - wmv
+  max-duration: 3600
+  quality:
+    video-bitrate: 2000000
+    audio-bitrate: 128000
+
+# Text-to-Speech Configuration
+tts:
+  aws:
+    voice-ids:
+      english: Joanna
+      arabic: Zeina
+      korean: Seoyeon
+      chinese: Zhiyu
+      tamil: Raveena
+      hindi: Aditi
+    engine: neural
+
+# Job Processing Configuration
+job:
+  max-concurrent-jobs: 2
+  retry-attempts: 1
+  retry-delay: 1000
+  timeout: 300000
+
+# Logging Configuration
+logging:
+  level:
+    com.videoservice: INFO
+    org.springframework.web: WARN
+    software.amazon.awssdk: WARN 

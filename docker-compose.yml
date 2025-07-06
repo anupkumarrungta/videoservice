@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  # MinIO - S3-compatible storage for local development
+  minio:
+    image: minio/minio:latest
+    container_name: video-translation-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # Video Translation Service
+  video-translation-service:
+    build: .
+    container_name: video-translation-service
+    ports:
+      - "8080:8080"
+    environment:
+      # AWS Configuration (pointing to MinIO)
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      S3_BUCKET_NAME: video-translation-bucket
+      S3_ENDPOINT: http://minio:9000
+      AWS_S3_FORCE_PATH_STYLE: "true"
+      
+      # Email Configuration (optional for development)
+      MAIL_USERNAME: test@example.com
+      MAIL_PASSWORD: testpassword
+      
+      # Application Configuration
+      SPRING_PROFILES_ACTIVE: dev
+      JAVA_OPTS: "-Xmx2g -Xms1g"
+      
+      # FFmpeg paths
+      FFMPEG_PATH: /usr/bin/ffmpeg
+      FFPROBE_PATH: /usr/bin/ffprobe
+    depends_on:
+      minio:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+      - ./temp:/app/temp
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/translation/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # PostgreSQL (alternative to H2 for production-like testing)
+  postgres:
+    image: postgres:15-alpine
+    container_name: video-translation-postgres
+    environment:
+      POSTGRES_DB: videotranslation
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  minio_data:
+  postgres_data: 

@@ -1,245 +1,365 @@
-# videoservice
-This is video translation service which allows translating audio from source input to other languages on behalf of content producers.
+# Video Translation Service
 
+A comprehensive multilingual content translation platform that enables content creators (independent journalists, teachers, educators) to translate their video content audio into multiple languages while preserving video quality, emotions, and context.
 
-# AI Agent Prompt: Multilingual Content Translation Platform
+## Features
 
-## Project Overview
-You are tasked with implementing a comprehensive multilingual content translation platform in Java that enables content creators (independent journalists, teachers, educators) to translate their video content audio into multiple languages while preserving video quality, emotions, and context.
+- **Multi-language Support**: English, Arabic, Korean, Chinese, Tamil, Hindi
+- **Video Processing**: Extract audio, chunk processing, maintain video quality
+- **AI Translation**: AWS Translate integration with context preservation
+- **Text-to-Speech**: AWS Polly integration for natural-sounding speech
+- **Cloud Storage**: AWS S3 integration with proper naming conventions
+- **Email Notifications**: Job completion and progress updates
+- **RESTful API**: Complete API for job management
+- **Asynchronous Processing**: Non-blocking job processing
+- **Progress Tracking**: Real-time job status and progress monitoring
 
-## Core Requirements
+## Architecture
 
-### 1. Application Purpose
-- Enable content producers to reach global audiences by translating their video audio content
-- Support independent journalists, teachers, and educators who create content on platforms like YouTube, Instagram
-- Maintain video quality while replacing audio with translated versions
-- Preserve emotional tone, context, and meaning during translation
+The application follows a microservices architecture with the following components:
 
-### 2. Supported Languages
-Implement translation support for:
-- English
-- Arabic
-- South Korean
-- Chinese (Mandarin)
-- Tamil
-- Hindi (source language example)
+- **VideoProcessingService**: Handles video file operations using FFmpeg
+- **TranslationService**: Manages text translation using AWS Translate
+- **AudioSynthesisService**: Generates speech using AWS Polly
+- **S3StorageService**: Manages file storage and retrieval
+- **NotificationService**: Handles email notifications
+- **JobManager**: Coordinates the entire translation workflow
 
-### 3. Technical Architecture Requirements
+## Prerequisites
 
-#### Core Components to Implement:
+- Java 17 or higher
+- Maven 3.6 or higher
+- FFmpeg (for video processing)
+- AWS Account with access to:
+  - S3 (for file storage)
+  - Translate (for text translation)
+  - Polly (for text-to-speech)
+- Docker and Docker Compose (for containerized deployment)
 
-1. **Video Processing Service**
-   - Extract audio from video files
-   - Maintain video stream integrity
-   - Support common video formats (MP4, AVI, MOV, etc.)
+## Quick Start
 
-2. **Audio Chunking Service**
-   - Split audio into ~3-minute chunks
-   - Respect sentence boundaries (no mid-sentence cuts)
-   - Maintain audio quality and continuity
+### Option 1: Docker Compose (Recommended for Development)
 
-3. **Translation Service**
-   - Preserve emotional tone and context
-   - Maintain meaning accuracy
-   - Handle cultural nuances appropriately
+1. **Clone the repository**:
+   ```bash
+   git clone <repository-url>
+   cd videoservice
+   ```
 
-4. **Audio Synthesis Service**
-   - Generate natural-sounding speech in target languages
-   - Match original speaker's pace and emotional delivery
-   - Maintain lip-sync compatibility
+2. **Start the services**:
+   ```bash
+   docker-compose up -d
+   ```
 
-5. **Video Assembly Service**
-   - Merge translated audio with original video
-   - Ensure audio-video synchronization
-   - Preserve video quality and visual elements
+3. **Access the services**:
+   - Video Translation API: http://localhost:8080
+   - MinIO Console: http://localhost:9001 (admin/minioadmin)
+   - H2 Database Console: http://localhost:8080/h2-console
 
-6. **Storage Management**
-   - AWS S3 integration for file storage
-   - Implement naming convention: `filename_lang_[language]`
-   - Example: `news_report_lang_english.mp4`, `news_report_lang_arabic.mp4`
+### Option 2: Local Development
 
-7. **Notification Service**
-   - Email notifications for job completion
-   - Progress tracking and status updates
-   - Error handling and user communication
+1. **Install FFmpeg**:
+   ```bash
+   # Ubuntu/Debian
+   sudo apt-get install ffmpeg
+   
+   # macOS
+   brew install ffmpeg
+   
+   # Windows
+   # Download from https://ffmpeg.org/download.html
+   ```
 
-8. **User Interface**
-   - Simple, intuitive UX for content creators
-   - File upload functionality
-   - Language selection interface
-   - Progress monitoring dashboard
+2. **Configure AWS credentials**:
+   ```bash
+   export AWS_ACCESS_KEY_ID=your-access-key
+   export AWS_SECRET_ACCESS_KEY=your-secret-key
+   export AWS_REGION=us-east-1
+   ```
 
-### 4. Implementation Specifications
+3. **Build and run**:
+   ```bash
+   mvn clean install
+   mvn spring-boot:run
+   ```
 
-#### Java Framework and Libraries:
-- **Spring Boot** for application framework
-- **Spring Security** for authentication
-- **Spring Cloud AWS** for S3 integration
-- **Apache Commons IO** for file operations
-- **JavaMail API** for email notifications
-- **Jackson** for JSON processing
-- **Maven** for dependency management
+## Configuration
 
-#### Required Dependencies:
-```xml
-<!-- Add these to your pom.xml -->
-<dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-web</artifactId>
-</dependency>
-<dependency>
-    <groupId>org.springframework.cloud</groupId>
-    <artifactId>spring-cloud-starter-aws</artifactId>
-</dependency>
-<dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-mail</artifactId>
-</dependency>
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `AWS_ACCESS_KEY_ID` | AWS access key | Required |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret key | Required |
+| `AWS_REGION` | AWS region | us-east-1 |
+| `S3_BUCKET_NAME` | S3 bucket name | video-translation-bucket |
+| `MAIL_USERNAME` | Email username | Required for notifications |
+| `MAIL_PASSWORD` | Email password | Required for notifications |
+
+### Application Properties
+
+Key configuration options in `application.yml`:
+
+```yaml
+# Video processing
+video:
+  max-duration: 3600  # 60 minutes
+  supported-formats: [mp4, avi, mov, mkv, wmv]
+
+# Audio processing
+audio:
+  chunk-duration: 180  # 3 minutes
+  sample-rate: 16000
+  bit-rate: 128000
+
+# Job processing
+job:
+  max-concurrent-jobs: 5
+  retry-attempts: 3
+  timeout: 3600000  # 1 hour
 ```
 
-#### Key Classes to Implement:
+## API Documentation
 
-1. **VideoTranslationController**
-   - Handle file uploads
-   - Manage translation requests
-   - Return job status and results
+### Upload Video for Translation
 
-2. **VideoProcessingService**
-   - Extract audio from video
-   - Manage video-audio separation
+```http
+POST /api/v1/translation/upload
+Content-Type: multipart/form-data
 
-3. **AudioChunkingService**
-   - Split audio into manageable chunks
-   - Preserve sentence boundaries
+file: [video file]
+sourceLanguage: english
+targetLanguages: [arabic, korean, chinese]
+userEmail: user@example.com
+description: Optional description
+```
 
-4. **TranslationService**
-   - Interface with translation APIs
-   - Maintain context and emotion
+**Response**:
+```json
+{
+  "jobId": "uuid",
+  "originalFilename": "video.mp4",
+  "status": "PENDING",
+  "progressPercentage": 0,
+  "userEmail": "user@example.com",
+  "createdAt": "2024-01-01T10:00:00"
+}
+```
 
-5. **AudioSynthesisService**
-   - Generate speech in target languages
-   - Match original audio characteristics
+### Get Job Status
 
-6. **S3StorageService**
-   - Handle file uploads/downloads
-   - Implement naming conventions
-   - Manage storage lifecycle
+```http
+GET /api/v1/translation/job/{jobId}
+```
 
-7. **NotificationService**
-   - Send completion emails
-   - Handle error notifications
+**Response**:
+```json
+{
+  "jobId": "uuid",
+  "originalFilename": "video.mp4",
+  "status": "COMPLETED",
+  "progressPercentage": 100,
+  "results": [
+    {
+      "targetLanguage": "arabic",
+      "status": "COMPLETED",
+      "downloadUrl": "https://...",
+      "fileSizeBytes": 1234567
+    }
+  ]
+}
+```
 
-8. **JobManager**
-   - Manage asynchronous processing
-   - Track job status and progress
+### Get User Jobs
 
-### 5. Technical Constraints and Requirements
+```http
+GET /api/v1/translation/jobs?userEmail=user@example.com&page=0&size=20
+```
 
-#### Performance Requirements:
-- Process videos up to 60 minutes in length
-- Support concurrent translation jobs
-- Maintain 99% uptime for the service
-- Optimize for cost-effective S3 storage
+### Cancel Job
 
-#### Quality Requirements:
-- Preserve original video quality
-- Maintain audio-video synchronization
-- Ensure natural-sounding translations
-- Preserve emotional tone and context
+```http
+POST /api/v1/translation/job/{jobId}/cancel
+```
 
-#### Security Requirements:
-- Secure file upload and storage
-- User authentication and authorization
-- Data encryption in transit and at rest
-- Compliance with content creator privacy needs
+### Retry Failed Job
 
-### 6. Integration Requirements
+```http
+POST /api/v1/translation/job/{jobId}/retry
+```
 
-#### AWS Services:
-- **S3** for file storage with lifecycle policies
-- **SQS** for job queue management
-- **SNS** for notifications
-- **CloudWatch** for monitoring and logging
+### Get Download URL
 
-#### External APIs:
-- Translation service APIs (Google Translate, AWS Translate, or similar)
-- Text-to-speech services (AWS Polly, Google TTS, or similar)
-- Video processing libraries (FFmpeg integration)
+```http
+GET /api/v1/translation/job/{jobId}/download/{language}
+```
 
-### 7. File Processing Workflow
+### Get System Statistics
 
-1. **Upload Phase**
-   - User uploads video file
-   - System validates file format and size
-   - Generate unique job ID
+```http
+GET /api/v1/translation/stats
+```
 
-2. **Processing Phase**
-   - Extract audio from video
-   - Chunk audio into ~3-minute segments
-   - Translate each chunk while preserving context
-   - Generate speech in target languages
-   - Reassemble video with new audio
+### Get Supported Languages
 
-3. **Storage Phase**
-   - Upload processed files to S3
-   - Apply naming convention
-   - Set appropriate metadata and permissions
+```http
+GET /api/v1/translation/languages
+```
 
-4. **Notification Phase**
-   - Send completion email with S3 links
-   - Provide preview functionality
-   - Include download instructions
+## Job Status Flow
 
-### 8. Error Handling and Resilience
+1. **PENDING**: Job created, waiting to be processed
+2. **UPLOADING**: File being uploaded to S3
+3. **PROCESSING**: Video being processed (audio extraction, chunking)
+4. **TRANSLATING**: Text being translated
+5. **SYNTHESIZING**: Speech being synthesized
+6. **ASSEMBLING**: Final video being assembled
+7. **COMPLETED**: Job completed successfully
+8. **FAILED**: Job failed with error
+9. **CANCELLED**: Job cancelled by user
 
-- Implement comprehensive error handling
-- Provide retry mechanisms for failed jobs
-- Maintain detailed logging for debugging
-- Implement circuit breaker patterns for external service calls
-- Handle partial failures gracefully
+## File Naming Convention
 
-### 9. Configuration Management
+Translated videos follow the naming convention:
+```
+{original_filename}_lang_{language}.mp4
+```
 
-Create application properties for:
-- AWS credentials and region settings
-- S3 bucket configurations
-- Email service settings
-- Translation service API keys
-- Processing parameters (chunk size, quality settings)
+Examples:
+- `news_report_lang_english.mp4`
+- `news_report_lang_arabic.mp4`
+- `news_report_lang_korean.mp4`
 
-### 10. Testing Requirements
+## Development
 
-Implement comprehensive testing:
-- Unit tests for core services
-- Integration tests for AWS services
-- End-to-end testing for complete workflows
-- Performance testing for large files
-- Security testing for file uploads
+### Project Structure
 
-## Implementation Priority
+```
+src/
+├── main/
+│   ├── java/com/videoservice/
+│   │   ├── config/          # Configuration classes
+│   │   ├── controller/      # REST controllers
+│   │   ├── dto/            # Data transfer objects
+│   │   ├── model/          # Entity classes
+│   │   ├── repository/     # Data access layer
+│   │   ├── service/        # Business logic services
+│   │   └── VideoTranslationApplication.java
+│   └── resources/
+│       ├── application.yml # Main configuration
+│       └── templates/      # Email templates
+└── test/
+    └── java/com/videoservice/
+        └── VideoTranslationApplicationTests.java
+```
 
-1. **Phase 1**: Basic video upload and S3 storage
-2. **Phase 2**: Audio extraction and chunking
-3. **Phase 3**: Translation service integration
-4. **Phase 4**: Audio synthesis and video assembly
-5. **Phase 5**: Notification system and UX polish
-6. **Phase 6**: Performance optimization and scaling
+### Running Tests
 
-## Success Metrics
+```bash
+mvn test
+```
 
-- Translation accuracy and emotional preservation
-- Processing time per video minute
-- User satisfaction with output quality
-- System reliability and uptime
-- Cost efficiency of operations
+### Code Coverage
 
-## Deliverables Expected
+```bash
+mvn jacoco:report
+```
 
-1. Complete Java application with all services
-2. Docker configuration for deployment
-3. AWS infrastructure setup scripts
-4. User documentation and API documentation
-5. Testing suite with coverage reports
-6. Performance benchmarks and optimization recommendations
+## Deployment
 
-Begin implementation by setting up the core Spring Boot application structure and AWS S3 integration, then progressively add the video processing, translation, and notification capabilities.
+### Production Deployment
+
+1. **Set up AWS infrastructure**:
+   - Create S3 bucket
+   - Configure IAM roles and policies
+   - Set up CloudWatch for monitoring
+
+2. **Configure environment variables**:
+   ```bash
+   export AWS_ACCESS_KEY_ID=production-access-key
+   export AWS_SECRET_ACCESS_KEY=production-secret-key
+   export S3_BUCKET_NAME=production-bucket
+   export MAIL_USERNAME=production-email
+   export MAIL_PASSWORD=production-password
+   ```
+
+3. **Build and deploy**:
+   ```bash
+   mvn clean package
+   java -jar target/video-translation-service-1.0.0.jar
+   ```
+
+### Docker Deployment
+
+```bash
+docker build -t video-translation-service .
+docker run -p 8080:8080 \
+  -e AWS_ACCESS_KEY_ID=your-key \
+  -e AWS_SECRET_ACCESS_KEY=your-secret \
+  video-translation-service
+```
+
+## Monitoring and Health Checks
+
+### Health Endpoint
+
+```http
+GET /api/v1/translation/health
+```
+
+### Actuator Endpoints
+
+- `/actuator/health` - Application health
+- `/actuator/metrics` - Application metrics
+- `/actuator/prometheus` - Prometheus metrics
+
+## Troubleshooting
+
+### Common Issues
+
+1. **FFmpeg not found**: Ensure FFmpeg is installed and in PATH
+2. **AWS credentials**: Verify AWS credentials are properly configured
+3. **S3 bucket**: Ensure S3 bucket exists and is accessible
+4. **Email configuration**: Check SMTP settings for notifications
+
+### Logs
+
+Application logs are available at:
+- Console output
+- `./logs/` directory (when using Docker)
+
+### Performance Tuning
+
+- Adjust `job.max-concurrent-jobs` based on server capacity
+- Configure JVM memory settings (`-Xmx`, `-Xms`)
+- Use appropriate S3 storage class for cost optimization
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Support
+
+For support and questions:
+- Create an issue in the repository
+- Contact the development team
+- Check the documentation
+
+## Roadmap
+
+- [ ] Speech-to-text integration (AWS Transcribe)
+- [ ] Advanced audio processing (noise reduction, audio enhancement)
+- [ ] Web interface for job management
+- [ ] Batch processing capabilities
+- [ ] Advanced translation quality metrics
+- [ ] Multi-tenant support
+- [ ] API rate limiting and quotas
+- [ ] Advanced security features

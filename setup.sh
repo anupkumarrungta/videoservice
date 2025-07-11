@@ -38,7 +38,7 @@ if [ ! -f .env ]; then
 AWS_ACCESS_KEY_ID=minioadmin
 AWS_SECRET_ACCESS_KEY=minioadmin
 AWS_REGION=us-east-1
-S3_BUCKET_NAME=video-translation-bucket
+S3_BUCKET_NAME=video-translation-bucket2
 S3_ENDPOINT=http://localhost:9000
 AWS_S3_FORCE_PATH_STYLE=true
 

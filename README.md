@@ -92,7 +92,7 @@ The application follows a microservices architecture with the following componen
 | `AWS_ACCESS_KEY_ID` | AWS access key | Required |
 | `AWS_SECRET_ACCESS_KEY` | AWS secret key | Required |
 | `AWS_REGION` | AWS region | us-east-1 |
-| `S3_BUCKET_NAME` | S3 bucket name | video-translation-bucket |
+| `S3_BUCKET_NAME` | S3 bucket name | video-translation-bucket2 |
 | `MAIL_USERNAME` | Email username | Required for notifications |
 | `MAIL_PASSWORD` | Email password | Required for notifications |
 

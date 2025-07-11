@@ -166,6 +166,8 @@ public class JobManager {
             } else {
                 // S3 file - download to temp
                 Path tempPath = Files.createTempFile("s3_download_", ".mp4");
+                // Delete the empty temp file so S3 can create it properly
+                Files.deleteIfExists(tempPath);
                 originalFile = s3StorageService.downloadFile(originalStorageKey, tempPath);
             }
             
@@ -175,40 +177,127 @@ public class JobManager {
             File audioFile = tempDir.resolve("extracted_audio.mp3").toFile();
             videoProcessingService.extractAudioFromVideo(originalFile, audioFile);
             
+            job.updateProgress(40);
+            jobRepository.save(job);
+            logger.info("Job {} progress updated to 40% for language: {}", job.getId(), targetLanguage);
+            
+            // Step 2: Split audio into chunks for processing
+            logger.info("Job {}: Splitting audio into chunks", job.getId());
+            List<File> audioChunks = videoProcessingService.splitAudioIntoChunks(audioFile, chunkDurationSeconds, tempDir);
+            logger.info("[Translation Pipeline] Created {} audio chunks for processing", audioChunks.size());
+            
             job.updateProgress(50);
             jobRepository.save(job);
             logger.info("Job {} progress updated to 50% for language: {}", job.getId(), targetLanguage);
             
-            // Step 2: Transcribe audio to text using AWS Transcribe
-            logger.info("Job {}: Transcribing audio to text", job.getId());
+            // Step 3: Process each audio chunk (transcribe, translate, synthesize)
+            logger.info("Job {}: Processing {} audio chunks", job.getId(), audioChunks.size());
+            List<File> translatedAudioChunks = new java.util.ArrayList<>();
             String sourceLanguageCode = transcriptionService.getLanguageCode(job.getSourceLanguage());
-            String transcribedText = transcriptionService.transcribeAudio(audioFile, sourceLanguageCode);
             
-            job.updateProgress(60);
-            jobRepository.save(job);
-            logger.info("Job {} progress updated to 60% for language: {}", job.getId(), targetLanguage);
-            
-            // Step 3: Translate text using AWS Translate
-            logger.info("Job {}: Translating text from {} to {}", job.getId(), job.getSourceLanguage(), targetLanguage);
-            String translatedText = translationService.translateText(transcribedText, job.getSourceLanguage(), targetLanguage);
+            for (int i = 0; i < audioChunks.size(); i++) {
+                File audioChunk = audioChunks.get(i);
+                logger.info("[Translation Pipeline] Processing chunk {}/{}: {} ({} bytes)", i + 1, audioChunks.size(), audioChunk.getName(), audioChunk.length());
+                
+                // Transcribe audio chunk to text
+                String transcribedText = transcriptionService.transcribeAudio(audioChunk, sourceLanguageCode);
+                logger.info("[Translation Pipeline] Hindi transcript for chunk {}: {}", i, transcribedText);
+                
+                // Translate text
+                String translatedText = translationService.translateText(transcribedText, job.getSourceLanguage(), targetLanguage);
+                logger.info("[Translation Pipeline] English translation for chunk {}: {}", i, translatedText);
+                
+                // Synthesize speech from translated text
+                File translatedAudioChunk = tempDir.resolve(
+                    String.format("translated_%s_chunk_%03d.mp3", targetLanguage, i)).toFile();
+                logger.info("[Translation Pipeline] Sending English translation to Polly for chunk {}: {}", i, translatedText);
+                logger.info("[Translation Pipeline] Target language for synthesis: {}", targetLanguage);
+                logger.info("[Translation Pipeline] Voice ID being used: {}", getVoiceIdForLanguage(targetLanguage));
+                
+                audioSynthesisService.synthesizeSpeech(translatedText, targetLanguage, translatedAudioChunk);
+                
+                // Verify the translated audio chunk was created
+                if (translatedAudioChunk.exists() && translatedAudioChunk.length() > 0) {
+                    logger.info("[Translation Pipeline] Translated audio chunk {} created: {} bytes", i, translatedAudioChunk.length());
+                    translatedAudioChunks.add(translatedAudioChunk);
+                } else {
+                    logger.error("[Translation Pipeline] Translated audio chunk {} was not created or is empty", i);
+                    throw new IOException("Translated audio chunk " + i + " was not created properly");
+                }
+                
+                // Update progress
+                int progress = 50 + (i + 1) * 20 / audioChunks.size();
+                job.updateProgress(progress);
+                jobRepository.save(job);
+                logger.info("Job {} progress updated to {}% for language: {}", job.getId(), progress, targetLanguage);
+            }
             
             job.updateProgress(70);
             jobRepository.save(job);
             logger.info("Job {} progress updated to 70% for language: {}", job.getId(), targetLanguage);
             
-            // Step 4: Synthesize speech from translated text using AWS Polly
-            logger.info("Job {}: Synthesizing speech for translated text", job.getId());
+            // Step 4: Merge translated audio chunks
+            logger.info("Job {}: Merging {} translated audio chunks", job.getId(), translatedAudioChunks.size());
             File translatedAudioFile = tempDir.resolve("translated_audio.mp3").toFile();
-            audioSynthesisService.synthesizeSpeech(translatedText, targetLanguage, translatedAudioFile);
+            
+            // Log details about chunks before merging
+            long totalChunkSize = 0;
+            for (int i = 0; i < translatedAudioChunks.size(); i++) {
+                File chunk = translatedAudioChunks.get(i);
+                logger.info("[Translation Pipeline] Translated chunk {}: {} bytes", i, chunk.length());
+                totalChunkSize += chunk.length();
+            }
+            logger.info("[Translation Pipeline] Total size of translated chunks: {} bytes", totalChunkSize);
+            
+            videoProcessingService.mergeAudioChunks(translatedAudioChunks, translatedAudioFile);
+            
+            // Verify the audio file was created and has content
+            if (!translatedAudioFile.exists() || translatedAudioFile.length() == 0) {
+                throw new IOException("Translated audio file was not created or is empty");
+            }
+            logger.info("[Translation Pipeline] Translated audio file created: {} bytes", translatedAudioFile.length());
+            
+            // Check if the merged file size is reasonable
+            if (translatedAudioFile.length() < totalChunkSize * 0.5) {
+                logger.warn("[Translation Pipeline] Merged audio file seems too small compared to input chunks");
+                logger.warn("[Translation Pipeline] Expected ~{} bytes, got {} bytes", totalChunkSize, translatedAudioFile.length());
+            }
+            
+            // Save translated audio to S3 for verification
+            String translatedAudioKey = job.getId() + "_" + targetLanguage + "_audio.mp3";
+            try {
+                s3StorageService.uploadFileWithKey(translatedAudioFile, translatedAudioKey);
+                logger.info("[Translation Pipeline] SUCCESS: Translated audio saved to S3: {}", translatedAudioKey);
+                logger.info("[Translation Pipeline] Audio file size in S3: {} bytes", translatedAudioFile.length());
+            } catch (Exception s3Error) {
+                logger.warn("[Translation Pipeline] Failed to save translated audio to S3, using local storage: {}", s3Error.getMessage());
+                localStorageService.uploadFileWithKey(translatedAudioFile, translatedAudioKey);
+                logger.info("[Translation Pipeline] Translated audio saved to local storage: {}", translatedAudioKey);
+            }
             
             job.updateProgress(80);
             jobRepository.save(job);
             logger.info("Job {} progress updated to 80% for language: {}", job.getId(), targetLanguage);
             
-            // Step 5: Replace audio in original video with translated audio
+            // Step 5: Create new video with translated audio
             logger.info("Job {}: Creating final translated video", job.getId());
             File translatedVideoFile = tempDir.resolve("translated_video.mp4").toFile();
+            
+            // Verify input files before video creation
+            logger.info("[Translation Pipeline] Original video file: {} bytes", originalFile.length());
+            logger.info("[Translation Pipeline] Translated audio file: {} bytes", translatedAudioFile.length());
+            logger.info("[Translation Pipeline] Number of audio chunks processed: {}", audioChunks.size());
+            logger.info("[Translation Pipeline] Number of translated audio chunks: {}", translatedAudioChunks.size());
+            
+            // Create new video with translated audio (instead of replacing audio in original)
             videoProcessingService.replaceAudioInVideo(originalFile, translatedAudioFile, translatedVideoFile);
+            
+            // Verify the output video was created
+            if (!translatedVideoFile.exists() || translatedVideoFile.length() == 0) {
+                throw new IOException("Translated video file was not created or is empty");
+            }
+            logger.info("[Translation Pipeline] Translated video file created: {} bytes", translatedVideoFile.length());
+            logger.info("[Translation Pipeline] SUCCESS: Video with English audio created successfully!");
             
             job.updateProgress(90);
             jobRepository.save(job);
@@ -220,11 +309,20 @@ public class JobManager {
             // Try to upload to S3 first, fallback to local storage if S3 fails
             try {
                 s3StorageService.uploadFileWithKey(translatedVideoFile, translatedVideoKey);
-                logger.info("Successfully uploaded translated video to S3: {}", translatedVideoKey);
+                logger.info("[Translation Pipeline] SUCCESS: Translated video uploaded to S3: {}", translatedVideoKey);
+                logger.info("[Translation Pipeline] Video file size in S3: {} bytes", translatedVideoFile.length());
+                
+                // Log the S3 URLs for easy access
+                String videoUrl = s3StorageService.getFileUrl(translatedVideoKey);
+                String audioUrl = s3StorageService.getFileUrl(translatedAudioKey);
+                logger.info("[Translation Pipeline] Download URLs:");
+                logger.info("[Translation Pipeline] - Translated Video: {}", videoUrl);
+                logger.info("[Translation Pipeline] - Translated Audio: {}", audioUrl);
+                
             } catch (Exception s3Error) {
-                logger.warn("S3 upload failed for translated video, falling back to local storage: {}", s3Error.getMessage());
+                logger.warn("[Translation Pipeline] S3 upload failed for translated video, falling back to local storage: {}", s3Error.getMessage());
                 localStorageService.uploadFileWithKey(translatedVideoFile, translatedVideoKey);
-                logger.info("Successfully uploaded translated video to local storage: {}", translatedVideoKey);
+                logger.info("[Translation Pipeline] Translated video uploaded to local storage: {}", translatedVideoKey);
             }
             
             // Update result
@@ -282,15 +380,17 @@ public class JobManager {
                 // Convert audio to text using AWS Transcribe
                 String sourceLanguageCode = transcriptionService.getLanguageCode(job.getSourceLanguage());
                 String transcribedText = transcriptionService.transcribeAudio(audioChunk, sourceLanguageCode);
+                logger.info("[Translation Pipeline] Hindi transcript for chunk {}: {}", i, transcribedText);
                 
                 // Translate text
                 String translatedText = translationService.translateText(
                     transcribedText, job.getSourceLanguage(), targetLanguage);
+                logger.info("[Translation Pipeline] English translation for chunk {}: {}", i, translatedText);
                 
                 // Synthesize speech from translated text
                 File translatedAudioChunk = tempDir.resolve(
                     String.format("translated_%s_chunk_%03d.mp3", targetLanguage, i)).toFile();
-                
+                logger.info("[Translation Pipeline] Sending English translation to Polly for chunk {}: {}", i, translatedText);
                 audioSynthesisService.synthesizeSpeech(translatedText, targetLanguage, translatedAudioChunk);
                 translatedAudioChunks.add(translatedAudioChunk);
                 
@@ -335,6 +435,31 @@ public class JobManager {
             logger.error("Failed to process language {} for job {}: {}", targetLanguage, job.getId(), e.getMessage());
             result.markAsFailed(e.getMessage());
             throw e;
+        }
+    }
+    
+    /**
+     * Get voice ID for a language (for logging purposes).
+     * 
+     * @param language The target language
+     * @return The voice ID being used
+     */
+    private String getVoiceIdForLanguage(String language) {
+        switch (language.toLowerCase()) {
+            case "english":
+                return "Joanna";
+            case "arabic":
+                return "Zeina";
+            case "korean":
+                return "Seoyeon";
+            case "chinese":
+                return "Zhiyu";
+            case "tamil":
+                return "Raveena";
+            case "hindi":
+                return "Aditi";
+            default:
+                return "Joanna (default)";
         }
     }
     

@@ -54,8 +54,8 @@ $bucketPolicy = @"
                 "s3:ListBucket"
             ],
             "Resource": [
-                "arn:aws:s3:::video-translation-bucket-anup",
-                "arn:aws:s3:::video-translation-bucket-anup/*"
+                        "arn:aws:s3:::video-translation-bucket2",
+        "arn:aws:s3:::video-translation-bucket2/*"
             ]
         }
     ]
@@ -63,7 +63,7 @@ $bucketPolicy = @"
 "@
 
 Write-Host "   # Apply bucket policy" -ForegroundColor Gray
-Write-Host "   aws s3api put-bucket-policy --bucket video-translation-bucket-anup --policy '$bucketPolicy'" -ForegroundColor Gray
+Write-Host "   aws s3api put-bucket-policy --bucket video-translation-bucket2 --policy '$bucketPolicy'" -ForegroundColor Gray
 Write-Host ""
 
 Write-Host "7. After applying permissions, restart your application:" -ForegroundColor Cyan

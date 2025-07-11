@@ -60,7 +60,7 @@ aws:
   
   # S3 Configuration
   s3:
-    bucket-name: ${S3_BUCKET_NAME:video-translation-bucket}
+    bucket-name: ${S3_BUCKET_NAME:video-translation-bucket2}
     endpoint: ${S3_ENDPOINT:}
     force-path-style: false
   
@@ -123,7 +123,7 @@ tts:
       chinese: Zhiyu
       tamil: Raveena
       hindi: Aditi
-    engine: neural
+    engine: standard
 
 # Job Processing Configuration
 job:

@@ -13,6 +13,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -54,6 +55,7 @@ public class AudioSynthesisService {
     
     /**
      * Synthesize speech from text.
+     * Handles long text by chunking it into smaller pieces.
      * 
      * @param text The text to synthesize
      * @param language The target language
@@ -62,8 +64,127 @@ public class AudioSynthesisService {
      * @throws SynthesisException if synthesis fails
      */
     public File synthesizeSpeech(String text, String language, File outputFile) throws SynthesisException {
-        logger.info("Synthesizing speech for language: {} to file: {}", language, outputFile.getName());
+        logger.info("[Audio Synthesis] Starting speech synthesis for language: {} to file: {} ({} chars)", language, outputFile.getName(), text.length());
+        logger.info("[Audio Synthesis] Text to synthesize: {}", text);
         
+        try {
+            // If text is too long, chunk it into smaller pieces
+            if (text.length() > 3000) {
+                logger.info("[Audio Synthesis] Text is too long ({} chars), chunking for synthesis", text.length());
+                return synthesizeLongText(text, language, outputFile);
+            }
+            
+            String voiceId = getVoiceId(language);
+            logger.info("[Audio Synthesis] Using voice ID: {} for language: {}", voiceId, language);
+            
+            SynthesizeSpeechRequest request = SynthesizeSpeechRequest.builder()
+                    .text(text)
+                    .voiceId(voiceId)
+                    .outputFormat(OutputFormat.MP3)
+                    .engine(Engine.STANDARD)
+                    .sampleRate(String.valueOf(sampleRate))
+                    .build();
+            
+            logger.info("[Audio Synthesis] Sending synthesis request to AWS Polly...");
+            ResponseInputStream<SynthesizeSpeechResponse> response = pollyClient.synthesizeSpeech(request);
+            
+            // Write audio data to file
+            byte[] audioData = response.readAllBytes();
+            Files.write(outputFile.toPath(), audioData);
+            
+            logger.info("[Audio Synthesis] SUCCESS: Speech synthesis completed!");
+            logger.info("[Audio Synthesis] Audio data size: {} bytes", audioData.length);
+            logger.info("[Audio Synthesis] File written to: {} (file size: {} bytes)", outputFile.getName(), outputFile.length());
+            logger.info("[Audio Synthesis] Voice used: {} for language: {}", voiceId, language);
+            return outputFile;
+            
+        } catch (Exception e) {
+            logger.error("Speech synthesis failed: {}", e.getMessage());
+            throw new SynthesisException("Failed to synthesize speech", e);
+        }
+    }
+    
+    /**
+     * Synthesize long text by breaking it into chunks and merging audio.
+     * 
+     * @param text The long text to synthesize
+     * @param language The target language
+     * @param outputFile The output audio file
+     * @return The synthesized audio file
+     * @throws SynthesisException if synthesis fails
+     */
+    private File synthesizeLongText(String text, String language, File outputFile) throws SynthesisException {
+        logger.info("Synthesizing long text in chunks: {} chars", text.length());
+        
+        try {
+            // Split text into sentences
+            String[] sentences = text.split("[.!?।]");
+            List<File> audioChunks = new java.util.ArrayList<>();
+            
+            for (int i = 0; i < sentences.length; i++) {
+                String sentence = sentences[i].trim();
+                if (sentence.isEmpty()) {
+                    continue;
+                }
+                
+                try {
+                    // Add punctuation back if it was removed
+                    String sentenceToSynthesize = sentence;
+                    if (i < sentences.length - 1) {
+                        sentenceToSynthesize += "."; // Add English period back
+                    }
+                    
+                    // Create temporary file for this chunk
+                    File chunkFile = File.createTempFile("audio_chunk_" + i + "_", ".mp3");
+                    synthesizeTextChunk(sentenceToSynthesize, language, chunkFile);
+                    audioChunks.add(chunkFile);
+                    
+                    logger.debug("Synthesized chunk {}/{}: {} chars", i + 1, sentences.length, sentenceToSynthesize.length());
+                    
+                    // Small delay to avoid rate limiting
+                    Thread.sleep(100);
+                    
+                } catch (Exception e) {
+                    logger.warn("Failed to synthesize chunk {}, skipping: {}", i + 1, e.getMessage());
+                }
+            }
+            
+            // Merge audio chunks
+            if (audioChunks.isEmpty()) {
+                throw new SynthesisException("No audio chunks were created successfully");
+            }
+            
+            if (audioChunks.size() == 1) {
+                // Only one chunk, just copy it
+                Files.copy(audioChunks.get(0).toPath(), outputFile.toPath());
+            } else {
+                // Merge multiple chunks using FFmpeg
+                mergeAudioChunks(audioChunks, outputFile);
+            }
+            
+            // Clean up chunk files
+            for (File chunk : audioChunks) {
+                chunk.delete();
+            }
+            
+            logger.info("Long text synthesis completed: {} -> {} bytes", text.length(), outputFile.length());
+            return outputFile;
+            
+        } catch (Exception e) {
+            logger.error("Long text synthesis failed: {}", e.getMessage());
+            throw new SynthesisException("Failed to synthesize long text", e);
+        }
+    }
+    
+    /**
+     * Synthesize a single text chunk (internal method).
+     * 
+     * @param text The text chunk to synthesize
+     * @param language The target language
+     * @param outputFile The output audio file
+     * @throws SynthesisException if synthesis fails
+     */
+    private void synthesizeTextChunk(String text, String language, File outputFile) throws SynthesisException {
         try {
             String voiceId = getVoiceId(language);
             
@@ -71,7 +192,7 @@ public class AudioSynthesisService {
                     .text(text)
                     .voiceId(voiceId)
                     .outputFormat(OutputFormat.MP3)
-                    .engine(Engine.NEURAL)
+                    .engine(Engine.STANDARD)
                     .sampleRate(String.valueOf(sampleRate))
                     .build();
             
@@ -81,12 +202,55 @@ public class AudioSynthesisService {
             byte[] audioData = response.readAllBytes();
             Files.write(outputFile.toPath(), audioData);
             
-            logger.info("Speech synthesis completed: {} bytes written to {}", audioData.length, outputFile.getName());
-            return outputFile;
+        } catch (Exception e) {
+            logger.error("Text chunk synthesis failed: {}", e.getMessage());
+            throw new SynthesisException("Failed to synthesize text chunk", e);
+        }
+    }
+    
+    /**
+     * Merge multiple audio files into one using FFmpeg.
+     * 
+     * @param audioFiles List of audio files to merge
+     * @param outputFile The output merged audio file
+     * @throws SynthesisException if merging fails
+     */
+    private void mergeAudioChunks(List<File> audioFiles, File outputFile) throws SynthesisException {
+        try {
+            // Create a file list for FFmpeg
+            File fileList = File.createTempFile("audio_list_", ".txt");
+            StringBuilder content = new StringBuilder();
+            for (File file : audioFiles) {
+                content.append("file '").append(file.getAbsolutePath()).append("'\n");
+            }
+            Files.write(fileList.toPath(), content.toString().getBytes());
+            
+            // Use FFmpeg to concatenate audio files
+            ProcessBuilder processBuilder = new ProcessBuilder(
+                "C:\\ffmpeg\\bin\\ffmpeg.exe",
+                "-f", "concat",
+                "-safe", "0",
+                "-i", fileList.getAbsolutePath(),
+                "-c", "copy",
+                "-y",
+                outputFile.getAbsolutePath()
+            );
+            
+            Process process = processBuilder.start();
+            int exitCode = process.waitFor();
+            
+            // Clean up file list
+            fileList.delete();
+            
+            if (exitCode != 0) {
+                String errorOutput = new String(process.getErrorStream().readAllBytes());
+                logger.error("FFmpeg merge error: {}", errorOutput);
+                throw new SynthesisException("Failed to merge audio chunks");
+            }
             
         } catch (Exception e) {
-            logger.error("Speech synthesis failed: {}", e.getMessage());
-            throw new SynthesisException("Failed to synthesize speech", e);
+            logger.error("Audio merging failed: {}", e.getMessage());
+            throw new SynthesisException("Failed to merge audio chunks", e);
         }
     }
     
@@ -110,7 +274,7 @@ public class AudioSynthesisService {
                     .text(ssmlText)
                     .voiceId(voiceId)
                     .outputFormat(OutputFormat.MP3)
-                    .engine(Engine.NEURAL)
+                    .engine(Engine.STANDARD)
                     .sampleRate(String.valueOf(sampleRate))
                     .build();
             
@@ -180,7 +344,7 @@ public class AudioSynthesisService {
         try {
             DescribeVoicesRequest request = DescribeVoicesRequest.builder()
                     .languageCode(languageCode)
-                    .engine(Engine.NEURAL)
+                    .engine(Engine.STANDARD)
                     .build();
             
             DescribeVoicesResponse response = pollyClient.describeVoices(request);

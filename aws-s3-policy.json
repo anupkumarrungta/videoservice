@@ -13,8 +13,8 @@
                 "s3:PutObjectAcl"
             ],
             "Resource": [
-                "arn:aws:s3:::video-translation-bucket-anup",
-                "arn:aws:s3:::video-translation-bucket-anup/*"
+                        "arn:aws:s3:::video-translation-bucket2",
+        "arn:aws:s3:::video-translation-bucket2/*"
             ]
         },
         {

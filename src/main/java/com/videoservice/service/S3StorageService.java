@@ -31,12 +31,15 @@ public class S3StorageService {
     private final S3Client s3Client;
     private final S3Presigner s3Presigner;
     private final String bucketName;
+    private final String s3Endpoint;
     
     public S3StorageService(S3Client s3Client, S3Presigner s3Presigner,
-                           @Value("${aws.s3.bucket-name}") String bucketName) {
+                           @Value("${aws.s3.bucket-name}") String bucketName,
+                           @Value("${aws.s3.endpoint:}") String s3Endpoint) {
         this.s3Client = s3Client;
         this.s3Presigner = s3Presigner;
         this.bucketName = bucketName;
+        this.s3Endpoint = s3Endpoint;
     }
     
     /**
@@ -112,6 +115,12 @@ public class S3StorageService {
                     .key(s3Key)
                     .build();
             
+            // Delete existing file if it exists to avoid conflicts
+            if (Files.exists(localPath)) {
+                Files.delete(localPath);
+                logger.debug("Deleted existing file at: {}", localPath);
+            }
+            
             File localFile = localPath.toFile();
             s3Client.getObject(getObjectRequest, localPath);
             
@@ -121,6 +130,9 @@ public class S3StorageService {
         } catch (S3Exception e) {
             logger.error("Failed to download file from S3 key {}: {}", s3Key, e.getMessage());
             throw new IOException("Failed to download file from S3", e);
+        } catch (IOException e) {
+            logger.error("Failed to handle local file for S3 download {}: {}", s3Key, e.getMessage());
+            throw new IOException("Failed to handle local file for S3 download", e);
         }
     }
     
@@ -150,6 +162,22 @@ public class S3StorageService {
         } catch (Exception e) {
             logger.error("Failed to generate presigned URL for S3 key {}: {}", s3Key, e.getMessage());
             throw new RuntimeException("Failed to generate presigned URL", e);
+        }
+    }
+    
+    /**
+     * Get a simple file URL for logging purposes.
+     * 
+     * @param s3Key The S3 key of the file
+     * @return The file URL
+     */
+    public String getFileUrl(String s3Key) {
+        if (s3Endpoint != null && !s3Endpoint.isEmpty()) {
+            // Local development with MinIO
+            return s3Endpoint + "/" + bucketName + "/" + s3Key;
+        } else {
+            // AWS S3
+            return "https://" + bucketName + ".s3.amazonaws.com/" + s3Key;
         }
     }
     

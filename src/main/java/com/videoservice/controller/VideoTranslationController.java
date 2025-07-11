@@ -52,6 +52,7 @@ public class VideoTranslationController {
     private final S3StorageService s3StorageService;
     private final LocalStorageService localStorageService;
     private final VideoProcessingService videoProcessingService;
+    private final com.videoservice.service.TranscriptionService transcriptionService;
     
     @Value("${spring.servlet.multipart.max-file-size}")
     private String maxFileSize;
@@ -63,12 +64,14 @@ public class VideoTranslationController {
                                     JobManager jobManager,
                                     S3StorageService s3StorageService,
                                     LocalStorageService localStorageService,
-                                    VideoProcessingService videoProcessingService) {
+                                    VideoProcessingService videoProcessingService,
+                                    com.videoservice.service.TranscriptionService transcriptionService) {
         this.jobRepository = jobRepository;
         this.jobManager = jobManager;
         this.s3StorageService = s3StorageService;
         this.localStorageService = localStorageService;
         this.videoProcessingService = videoProcessingService;
+        this.transcriptionService = transcriptionService;
     }
     
     /**
@@ -420,6 +423,153 @@ public class VideoTranslationController {
     @GetMapping("/health")
     public ResponseEntity<Map<String, String>> health() {
         return ResponseEntity.ok(Map.of("status", "healthy", "service", "Video Translation Service"));
+    }
+    
+    /**
+     * Test AWS connectivity and configuration.
+     * 
+     * @return AWS test results
+     */
+    @GetMapping("/test-aws")
+    public ResponseEntity<Map<String, Object>> testAws() {
+        logger.info("Testing AWS connectivity and configuration");
+        
+        try {
+            // Test S3 connectivity
+            String bucketName = System.getenv("S3_BUCKET_NAME");
+            logger.info("S3 bucket name: {}", bucketName);
+            
+            // Test if we can list objects (this will fail if credentials are wrong)
+            try {
+                // This is a simple test - just try to access the bucket
+                s3StorageService.getFileUrl("test-file-that-does-not-exist");
+                logger.info("S3 connectivity test passed");
+            } catch (Exception e) {
+                logger.error("S3 connectivity test failed: {}", e.getMessage());
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body(Map.of(
+                                "success", false,
+                                "error", "S3 connectivity failed: " + e.getMessage()
+                        ));
+            }
+            
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "aws", Map.of(
+                            "s3Bucket", bucketName,
+                            "region", System.getenv("AWS_REGION"),
+                            "accessKeyConfigured", System.getenv("AWS_ACCESS_KEY_ID") != null,
+                            "secretKeyConfigured", System.getenv("AWS_SECRET_ACCESS_KEY") != null
+                    )
+            ));
+            
+        } catch (Exception e) {
+            logger.error("AWS test failed: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of(
+                            "success", false,
+                            "error", e.getMessage()
+                    ));
+        }
+    }
+    
+    /**
+     * Test endpoint to verify audio extraction from a video file.
+     * 
+     * @param file The video file to test
+     * @return Test results
+     */
+    @PostMapping(value = "/test-audio-extraction", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, Object>> testAudioExtraction(@RequestParam("file") MultipartFile file) {
+        logger.info("Testing audio extraction for file: {} ({} bytes)", file.getOriginalFilename(), file.getSize());
+        
+        try {
+            // Save file temporarily
+            Path tempFile = Files.createTempFile("test_", "_" + file.getOriginalFilename());
+            file.transferTo(tempFile.toFile());
+            
+            // Test video validation
+            var videoInfo = videoProcessingService.validateVideo(tempFile.toFile());
+            
+            // Test audio extraction
+            Path audioFile = Files.createTempFile("test_audio_", ".mp3");
+            videoProcessingService.extractAudio(tempFile.toFile(), audioFile.toFile());
+            
+            // Get audio file info
+            long audioSize = audioFile.toFile().length();
+            
+            // Clean up
+            Files.deleteIfExists(tempFile);
+            Files.deleteIfExists(audioFile);
+            
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "videoInfo", Map.of(
+                            "duration", videoInfo.getDurationSeconds(),
+                            "size", videoInfo.getFileSizeBytes(),
+                            "videoCodec", videoInfo.getVideoCodec(),
+                            "audioCodec", videoInfo.getAudioCodec(),
+                            "width", videoInfo.getWidth(),
+                            "height", videoInfo.getHeight()
+                    ),
+                    "audioExtraction", Map.of(
+                            "success", true,
+                            "audioSize", audioSize
+                    )
+            ));
+            
+        } catch (Exception e) {
+            logger.error("Audio extraction test failed: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of(
+                            "success", false,
+                            "error", e.getMessage()
+                    ));
+        }
+    }
+    
+    /**
+     * Test endpoint to verify transcription from an audio file.
+     * 
+     * @param file The audio file to test
+     * @param language The language code (e.g., "hi-IN")
+     * @return Test results
+     */
+    @PostMapping(value = "/test-transcription", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, Object>> testTranscription(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("language") String language) {
+        logger.info("Testing transcription for file: {} ({} bytes) with language: {}", 
+                   file.getOriginalFilename(), file.getSize(), language);
+        
+        try {
+            // Save file temporarily
+            Path tempFile = Files.createTempFile("test_transcription_", "_" + file.getOriginalFilename());
+            file.transferTo(tempFile.toFile());
+            
+            // Test transcription
+            String transcribedText = transcriptionService.transcribeAudio(tempFile.toFile(), language);
+            
+            // Clean up
+            Files.deleteIfExists(tempFile);
+            
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "transcription", Map.of(
+                            "text", transcribedText,
+                            "length", transcribedText.length(),
+                            "language", language
+                    )
+            ));
+            
+        } catch (Exception e) {
+            logger.error("Transcription test failed: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of(
+                            "success", false,
+                            "error", e.getMessage()
+                    ));
+        }
     }
     
     /**

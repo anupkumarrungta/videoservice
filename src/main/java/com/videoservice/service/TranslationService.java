@@ -44,6 +44,7 @@ public class TranslationService {
     
     /**
      * Translate text from source language to target language.
+     * Handles long text by chunking it into smaller pieces.
      * 
      * @param text The text to translate
      * @param sourceLanguage The source language
@@ -52,8 +53,100 @@ public class TranslationService {
      * @throws TranslationException if translation fails
      */
     public String translateText(String text, String sourceLanguage, String targetLanguage) throws TranslationException {
-        logger.debug("Translating text from {} to {}: {}", sourceLanguage, targetLanguage, text.substring(0, Math.min(50, text.length())));
+        logger.info("[Translation Service] Starting translation from {} to {}: {} chars", sourceLanguage, targetLanguage, text.length());
+        logger.info("[Translation Service] Source text: {}", text);
         
+        try {
+            // If text is too long, chunk it into smaller pieces
+            if (text.length() > 5000) {
+                logger.info("[Translation Service] Text is too long ({} chars), chunking for translation", text.length());
+                return translateLongText(text, sourceLanguage, targetLanguage);
+            }
+            
+            String sourceCode = getLanguageCode(sourceLanguage);
+            String targetCode = getLanguageCode(targetLanguage);
+            
+            logger.info("[Translation Service] Language codes - Source: {}, Target: {}", sourceCode, targetCode);
+            
+            TranslateTextRequest request = TranslateTextRequest.builder()
+                    .text(text)
+                    .sourceLanguageCode(sourceCode)
+                    .targetLanguageCode(targetCode)
+                    .build();
+            
+            logger.info("[Translation Service] Sending translation request to AWS Translate...");
+            TranslateTextResponse response = translateClient.translateText(request);
+            
+            String translatedText = response.translatedText();
+            logger.info("[Translation Service] Translation completed successfully!");
+            logger.info("[Translation Service] Original text ({} chars): {}", text.length(), text);
+            logger.info("[Translation Service] Translated text ({} chars): {}", translatedText.length(), translatedText);
+            
+            return translatedText;
+            
+        } catch (TranslateException e) {
+            logger.error("Translation failed: {}", e.getMessage());
+            throw new TranslationException("Failed to translate text", e);
+        }
+    }
+    
+    /**
+     * Translate long text by breaking it into chunks.
+     * 
+     * @param text The long text to translate
+     * @param sourceLanguage The source language
+     * @param targetLanguage The target language
+     * @return The translated text
+     * @throws TranslationException if translation fails
+     */
+    private String translateLongText(String text, String sourceLanguage, String targetLanguage) throws TranslationException {
+        logger.info("Translating long text in chunks: {} chars", text.length());
+        
+        // Split text into sentences or chunks
+        String[] sentences = text.split("[।.!?]");
+        StringBuilder translatedText = new StringBuilder();
+        
+        for (int i = 0; i < sentences.length; i++) {
+            String sentence = sentences[i].trim();
+            if (sentence.isEmpty()) {
+                continue;
+            }
+            
+            try {
+                // Add punctuation back if it was removed
+                String sentenceToTranslate = sentence;
+                if (i < sentences.length - 1) {
+                    sentenceToTranslate += "।"; // Add Hindi period back
+                }
+                
+                String translatedSentence = translateTextChunk(sentenceToTranslate, sourceLanguage, targetLanguage);
+                translatedText.append(translatedSentence).append(" ");
+                
+                logger.debug("Translated chunk {}/{}: {} chars", i + 1, sentences.length, sentenceToTranslate.length());
+                
+                // Small delay to avoid rate limiting
+                Thread.sleep(100);
+                
+            } catch (Exception e) {
+                logger.warn("Failed to translate chunk {}, using original: {}", i + 1, e.getMessage());
+                translatedText.append(sentence).append(" ");
+            }
+        }
+        
+        logger.info("Long text translation completed: {} -> {} chars", text.length(), translatedText.length());
+        return translatedText.toString().trim();
+    }
+    
+    /**
+     * Translate a single text chunk (internal method to avoid recursion).
+     * 
+     * @param text The text chunk to translate
+     * @param sourceLanguage The source language
+     * @param targetLanguage The target language
+     * @return The translated text
+     * @throws TranslationException if translation fails
+     */
+    private String translateTextChunk(String text, String sourceLanguage, String targetLanguage) throws TranslationException {
         try {
             String sourceCode = getLanguageCode(sourceLanguage);
             String targetCode = getLanguageCode(targetLanguage);
@@ -65,16 +158,11 @@ public class TranslationService {
                     .build();
             
             TranslateTextResponse response = translateClient.translateText(request);
-            
-            String translatedText = response.translatedText();
-            logger.debug("Translation completed: {} -> {}", text.substring(0, Math.min(30, text.length())), 
-                        translatedText.substring(0, Math.min(30, translatedText.length())));
-            
-            return translatedText;
+            return response.translatedText();
             
         } catch (TranslateException e) {
-            logger.error("Translation failed: {}", e.getMessage());
-            throw new TranslationException("Failed to translate text", e);
+            logger.error("Translation chunk failed: {}", e.getMessage());
+            throw new TranslationException("Failed to translate text chunk", e);
         }
     }
     

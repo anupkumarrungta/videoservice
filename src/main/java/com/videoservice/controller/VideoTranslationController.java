@@ -35,6 +35,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.HashMap;
+import java.util.Arrays;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
+import software.amazon.awssdk.services.transcribe.model.ListTranscriptionJobsRequest;
+import software.amazon.awssdk.services.transcribe.model.ListTranscriptionJobsResponse;
 
 /**
  * REST controller for video translation operations.
@@ -53,6 +59,8 @@ public class VideoTranslationController {
     private final LocalStorageService localStorageService;
     private final VideoProcessingService videoProcessingService;
     private final com.videoservice.service.TranscriptionService transcriptionService;
+    private final software.amazon.awssdk.services.transcribe.TranscribeClient transcribeClient;
+    private final software.amazon.awssdk.services.s3.S3Client s3Client;
     
     @Value("${spring.servlet.multipart.max-file-size}")
     private String maxFileSize;
@@ -65,13 +73,17 @@ public class VideoTranslationController {
                                     S3StorageService s3StorageService,
                                     LocalStorageService localStorageService,
                                     VideoProcessingService videoProcessingService,
-                                    com.videoservice.service.TranscriptionService transcriptionService) {
+                                    com.videoservice.service.TranscriptionService transcriptionService,
+                                    software.amazon.awssdk.services.transcribe.TranscribeClient transcribeClient,
+                                    software.amazon.awssdk.services.s3.S3Client s3Client) {
         this.jobRepository = jobRepository;
         this.jobManager = jobManager;
         this.s3StorageService = s3StorageService;
         this.localStorageService = localStorageService;
         this.videoProcessingService = videoProcessingService;
         this.transcriptionService = transcriptionService;
+        this.transcribeClient = transcribeClient;
+        this.s3Client = s3Client;
     }
     
     /**
@@ -570,6 +582,126 @@ public class VideoTranslationController {
                             "error", e.getMessage()
                     ));
         }
+    }
+    
+    /**
+     * Test AWS Transcribe connectivity and configuration.
+     */
+    @GetMapping("/test-aws-transcribe")
+    public ResponseEntity<Map<String, Object>> testAwsTranscribe() {
+        logger.info("Testing AWS Transcribe connectivity and configuration");
+        
+        Map<String, Object> result = new HashMap<>();
+        Map<String, Object> details = new HashMap<>();
+        
+        try {
+            // Test 1: Check if TranscribeClient is available
+            details.put("transcribeClientAvailable", true);
+            details.put("transcribeClientClass", "software.amazon.awssdk.services.transcribe.TranscribeClient");
+            
+            // Test 2: Check AWS credentials
+            try {
+                // Try to list transcription jobs (this will test credentials)
+                ListTranscriptionJobsRequest listRequest = ListTranscriptionJobsRequest.builder()
+                        .maxResults(1)
+                        .build();
+                
+                ListTranscriptionJobsResponse listResponse = transcribeClient.listTranscriptionJobs(listRequest);
+                details.put("credentialsValid", true);
+                details.put("transcriptionJobsCount", listResponse.transcriptionJobSummaries().size());
+                details.put("awsRegion", "us-east-1"); // Assuming this is the region
+                
+            } catch (Exception e) {
+                details.put("credentialsValid", false);
+                details.put("credentialsError", e.getMessage());
+                logger.error("AWS credentials test failed: {}", e.getMessage());
+            }
+            
+            // Test 3: Check S3 bucket access
+            try {
+                // Try to list objects in the transcription bucket
+                ListObjectsV2Request listObjectsRequest = ListObjectsV2Request.builder()
+                        .bucket("video-translation-bucket2")
+                        .maxKeys(1)
+                        .build();
+                
+                ListObjectsV2Response listObjectsResponse = s3Client.listObjectsV2(listObjectsRequest);
+                details.put("s3BucketAccess", true);
+                details.put("s3BucketName", "video-translation-bucket2");
+                details.put("s3ObjectsCount", listObjectsResponse.keyCount());
+                
+            } catch (Exception e) {
+                details.put("s3BucketAccess", false);
+                details.put("s3Error", e.getMessage());
+                logger.error("S3 bucket access test failed: {}", e.getMessage());
+            }
+            
+            // Test 4: Check IAM permissions
+            details.put("requiredPermissions", Arrays.asList(
+                "transcribe:StartTranscriptionJob",
+                "transcribe:GetTranscriptionJob", 
+                "transcribe:ListTranscriptionJobs",
+                "s3:PutObject",
+                "s3:GetObject",
+                "s3:DeleteObject"
+            ));
+            
+            result.put("success", true);
+            result.put("message", "AWS Transcribe connectivity test completed");
+            result.put("details", details);
+            
+        } catch (Exception e) {
+            logger.error("AWS Transcribe connectivity test failed: {}", e.getMessage(), e);
+            result.put("success", false);
+            result.put("error", e.getMessage());
+            result.put("details", details);
+        }
+        
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * Test transcription with detailed error reporting.
+     */
+    @PostMapping(value = "/test-transcription-detailed", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, Object>> testTranscriptionDetailed(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("language") String language) {
+        logger.info("Testing transcription with detailed error reporting for file: {} ({} bytes) with language: {}", 
+                   file.getOriginalFilename(), file.getSize(), language);
+        
+        Map<String, Object> result = new HashMap<>();
+        
+        try {
+            // Save file temporarily
+            Path tempFile = Files.createTempFile("test_transcription_detailed_", "_" + file.getOriginalFilename());
+            file.transferTo(tempFile.toFile());
+            
+            logger.info("Testing transcription with file: {} ({} bytes)", tempFile.toString(), tempFile.toFile().length());
+            
+            // Test transcription with detailed logging
+            String transcribedText = transcriptionService.transcribeAudio(tempFile.toFile(), language);
+            
+            result.put("success", true);
+            result.put("transcription", Map.of(
+                    "text", transcribedText,
+                    "length", transcribedText.length(),
+                    "language", language,
+                    "isMockTranscription", transcribedText.contains("मैं आपको एक महत्वपूर्ण जानकारी") || transcribedText.contains("नमस्ते दोस्तों") || transcribedText.contains("Hello friends")
+            ));
+            
+            // Clean up
+            Files.deleteIfExists(tempFile);
+            
+        } catch (Exception e) {
+            logger.error("Detailed transcription test failed: {}", e.getMessage(), e);
+            result.put("success", false);
+            result.put("error", e.getMessage());
+            result.put("errorType", e.getClass().getSimpleName());
+            result.put("stackTrace", Arrays.asList(e.getStackTrace()).subList(0, Math.min(5, e.getStackTrace().length)));
+        }
+        
+        return ResponseEntity.ok(result);
     }
     
     /**

@@ -92,7 +92,7 @@ translation:
 
 # Audio Processing Configuration
 audio:
-  chunk-duration: 180 # 3 minutes in seconds
+  chunk-duration: 60 # 1 minute in seconds - smaller chunks for better processing
   sample-rate: 16000
   bit-rate: 128000
   format: mp3
@@ -109,6 +109,7 @@ video:
   quality:
     video-bitrate: 2000000
     audio-bitrate: 128000
+  preserve-duration: true # Preserve original video duration
   ffmpeg:
     path: ${FFMPEG_PATH:C:\ffmpeg\bin\ffmpeg.exe}
     ffprobe-path: ${FFPROBE_PATH:C:\ffmpeg\bin\ffprobe.exe}

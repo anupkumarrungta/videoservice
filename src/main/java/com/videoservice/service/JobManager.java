@@ -200,8 +200,15 @@ public class JobManager {
                 logger.info("[Translation Pipeline] Processing chunk {}/{}: {} ({} bytes)", i + 1, audioChunks.size(), audioChunk.getName(), audioChunk.length());
                 
                 // Transcribe audio chunk to text
+                logger.info("[Translation Pipeline] Transcribing chunk {} with source language: {} (code: {})", i, job.getSourceLanguage(), sourceLanguageCode);
                 String transcribedText = transcriptionService.transcribeAudio(audioChunk, sourceLanguageCode);
-                logger.info("[Translation Pipeline] Hindi transcript for chunk {}: {}", i, transcribedText);
+                logger.info("[Translation Pipeline] Transcript for chunk {}: {}", i, transcribedText);
+                
+                // Check if transcription is using mock data
+                if (transcriptionService.isMockTranscription(transcribedText)) {
+                    logger.warn("[Translation Pipeline] WARNING: Using mock transcription for chunk {}! This indicates AWS Transcribe failed.", i);
+                    logger.warn("[Translation Pipeline] Source language: {}, Language code: {}", job.getSourceLanguage(), sourceLanguageCode);
+                }
                 
                 // Translate text
                 String translatedText = translationService.translateText(transcribedText, job.getSourceLanguage(), targetLanguage);
@@ -379,8 +386,15 @@ public class JobManager {
                 
                 // Convert audio to text using AWS Transcribe
                 String sourceLanguageCode = transcriptionService.getLanguageCode(job.getSourceLanguage());
+                logger.info("[Translation Pipeline] Transcribing chunk {} with source language: {} (code: {})", i, job.getSourceLanguage(), sourceLanguageCode);
                 String transcribedText = transcriptionService.transcribeAudio(audioChunk, sourceLanguageCode);
-                logger.info("[Translation Pipeline] Hindi transcript for chunk {}: {}", i, transcribedText);
+                logger.info("[Translation Pipeline] Transcript for chunk {}: {}", i, transcribedText);
+                
+                // Check if transcription is using mock data
+                if (transcriptionService.isMockTranscription(transcribedText)) {
+                    logger.warn("[Translation Pipeline] WARNING: Using mock transcription for chunk {}! This indicates AWS Transcribe failed.", i);
+                    logger.warn("[Translation Pipeline] Source language: {}, Language code: {}", job.getSourceLanguage(), sourceLanguageCode);
+                }
                 
                 // Translate text
                 String translatedText = translationService.translateText(

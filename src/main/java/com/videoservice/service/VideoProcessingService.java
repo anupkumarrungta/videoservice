@@ -615,9 +615,8 @@ public class VideoProcessingService {
             logger.warn("[Video Processing] File paths are very long, this might cause issues");
         }
         
-        // Use a completely different approach that creates a new video with translated audio
-        // This bypasses the FFmpeg hanging issue entirely
-        return createVideoWithTranslatedAudio(videoFile, audioFile, outputFile);
+        // Use a new approach that explicitly preserves video duration
+        return createVideoWithPreservedDuration(videoFile, audioFile, outputFile);
     }
     
     /**
@@ -666,7 +665,8 @@ public class VideoProcessingService {
                 "-c:a", "aac",
                 "-map", "0:v:0",
                 "-map", "1:a:0",
-                "-shortest",
+                "-avoid_negative_ts", "make_zero",
+                "-fflags", "+genpts",
                 "-y",
                 outputFile.getAbsolutePath()
             );
@@ -740,6 +740,140 @@ public class VideoProcessingService {
         } catch (Exception e) {
             logger.warn("Video creation failed, trying fallback approach: {}", e.getMessage());
             return createVideoWithTranslatedAudioFallback(videoFile, audioFile, outputFile);
+        }
+    }
+    
+    /**
+     * Create a new video with translated audio while explicitly preserving video duration.
+     * This method uses a different FFmpeg approach to ensure the full video duration is maintained.
+     */
+    private File createVideoWithPreservedDuration(File videoFile, File audioFile, File outputFile) throws IOException {
+        logger.info("[Video Processing] Creating video with preserved duration: {} + {}", videoFile.getName(), audioFile.getName());
+        logger.info("[Video Processing] Original video size: {} bytes", videoFile.length());
+        logger.info("[Video Processing] Translated audio size: {} bytes", audioFile.length());
+        
+        try {
+            // First, get the original video duration
+            ProcessBuilder durationBuilder = new ProcessBuilder(
+                "C:\\ffmpeg\\bin\\ffprobe.exe",
+                "-v", "quiet",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                videoFile.getAbsolutePath()
+            );
+            
+            Process durationProcess = durationBuilder.start();
+            String durationOutput = new String(durationProcess.getInputStream().readAllBytes()).trim();
+            int durationExitCode = durationProcess.waitFor();
+            
+            if (durationExitCode != 0) {
+                logger.error("[Video Processing] Failed to get video duration");
+                throw new IOException("Failed to get video duration");
+            }
+            
+            double videoDuration = Double.parseDouble(durationOutput);
+            logger.info("[Video Processing] Original video duration: {} seconds", videoDuration);
+            
+            // Use FFmpeg with explicit duration preservation
+            ProcessBuilder processBuilder = new ProcessBuilder(
+                "C:\\ffmpeg\\bin\\ffmpeg.exe",
+                "-i", videoFile.getAbsolutePath(),
+                "-i", audioFile.getAbsolutePath(),
+                "-c:v", "copy",
+                "-c:a", "aac",
+                "-map", "0:v:0",
+                "-map", "1:a:0",
+                "-avoid_negative_ts", "make_zero",
+                "-fflags", "+genpts",
+                "-max_interleave_delta", "0",
+                "-y",
+                outputFile.getAbsolutePath()
+            );
+            
+            logger.info("[Video Processing] FFmpeg command: {}", String.join(" ", processBuilder.command()));
+            
+            Process process = processBuilder.start();
+            logger.info("[Video Processing] FFmpeg process started, waiting for completion...");
+            
+            // Capture error output in a separate thread to avoid blocking
+            StringBuilder errorOutput = new StringBuilder();
+            Thread errorReader = new Thread(() -> {
+                try {
+                    byte[] buffer = new byte[1024];
+                    int bytesRead;
+                    while ((bytesRead = process.getErrorStream().read(buffer)) != -1) {
+                        errorOutput.append(new String(buffer, 0, bytesRead));
+                    }
+                } catch (IOException e) {
+                    logger.warn("[Video Processing] Error reading FFmpeg error stream: {}", e.getMessage());
+                }
+            });
+            errorReader.start();
+            
+            // Set a reasonable timeout (180 seconds for video processing)
+            boolean completed = false;
+            try {
+                completed = process.waitFor(180, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                process.destroyForcibly();
+                errorReader.interrupt();
+                throw new IOException("Video creation was interrupted", e);
+            }
+            
+            if (!completed) {
+                logger.error("[Video Processing] Video creation timed out after 180 seconds");
+                process.destroyForcibly();
+                errorReader.interrupt();
+                logger.error("[Video Processing] FFmpeg error output so far: {}", errorOutput.toString());
+                throw new IOException("Video creation timed out");
+            }
+            
+            int exitCode = process.exitValue();
+            logger.info("[Video Processing] FFmpeg process completed with exit code: {}", exitCode);
+            
+            if (exitCode != 0) {
+                logger.error("[Video Processing] FFmpeg error output: {}", errorOutput.toString());
+                throw new IOException("Video creation failed with exit code: " + exitCode);
+            }
+            
+            // Verify the output video duration
+            ProcessBuilder verifyBuilder = new ProcessBuilder(
+                "C:\\ffmpeg\\bin\\ffprobe.exe",
+                "-v", "quiet",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                outputFile.getAbsolutePath()
+            );
+            
+            Process verifyProcess = verifyBuilder.start();
+            String verifyOutput = new String(verifyProcess.getInputStream().readAllBytes()).trim();
+            int verifyExitCode = verifyProcess.waitFor();
+            
+            if (verifyExitCode == 0) {
+                double outputDuration = Double.parseDouble(verifyOutput);
+                logger.info("[Video Processing] Output video duration: {} seconds", outputDuration);
+                
+                // Check if duration is preserved (allow 5% tolerance)
+                double durationDiff = Math.abs(videoDuration - outputDuration);
+                double tolerance = videoDuration * 0.05;
+                
+                if (durationDiff > tolerance) {
+                    logger.warn("[Video Processing] Duration mismatch! Original: {}s, Output: {}s, Diff: {}s", 
+                               videoDuration, outputDuration, durationDiff);
+                } else {
+                    logger.info("[Video Processing] Duration preserved successfully!");
+                }
+            }
+            
+            logger.info("[Video Processing] SUCCESS: Video with preserved duration created successfully!");
+            logger.info("[Video Processing] Output video file: {} (size: {} bytes)", outputFile.getName(), outputFile.length());
+            
+            return outputFile;
+            
+        } catch (Exception e) {
+            logger.error("[Video Processing] Failed to create video with preserved duration: {}", e.getMessage());
+            throw new IOException("Failed to create video with preserved duration", e);
         }
     }
     
@@ -855,18 +989,19 @@ public class VideoProcessingService {
         logger.info("Using reliable audio replacement approach");
         
         // Use a very simple FFmpeg command that's known to work
-        ProcessBuilder processBuilder = new ProcessBuilder(
-            "C:\\ffmpeg\\bin\\ffmpeg.exe",
-            "-i", videoFile.getAbsolutePath(),
-            "-i", audioFile.getAbsolutePath(),
-            "-c:v", "copy",
-            "-c:a", "aac",
-            "-map", "0:v:0",
-            "-map", "1:a:0",
-            "-shortest",
-            "-y",
-            outputFile.getAbsolutePath()
-        );
+                    ProcessBuilder processBuilder = new ProcessBuilder(
+                "C:\\ffmpeg\\bin\\ffmpeg.exe",
+                "-i", videoFile.getAbsolutePath(),
+                "-i", audioFile.getAbsolutePath(),
+                "-c:v", "copy",
+                "-c:a", "aac",
+                "-map", "0:v:0",
+                "-map", "1:a:0",
+                "-avoid_negative_ts", "make_zero",
+                "-fflags", "+genpts",
+                "-y",
+                outputFile.getAbsolutePath()
+            );
         
         logger.info("FFmpeg command: {}", String.join(" ", processBuilder.command()));
         
@@ -992,7 +1127,6 @@ public class VideoProcessingService {
             "-i", audioFile.getAbsolutePath(),
             "-c:v", "copy",
             "-c:a", "aac",
-            "-shortest",
             "-y",
             outputFile.getAbsolutePath()
         );
@@ -1043,7 +1177,6 @@ public class VideoProcessingService {
             "-map", "1:a",
             "-c:v", "copy",
             "-c:a", "aac",
-            "-shortest",
             "-y",
             outputFile.getAbsolutePath()
         );
@@ -1140,7 +1273,6 @@ public class VideoProcessingService {
                 "-i", audioFile.getAbsolutePath(),
                 "-c:v", "libx264",
                 "-c:a", "aac",
-                "-shortest",
                 "-y",
                 outputFile.getAbsolutePath()
             );

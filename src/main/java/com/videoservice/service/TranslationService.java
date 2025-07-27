@@ -26,12 +26,31 @@ public class TranslationService {
     private static final Map<String, String> LANGUAGE_CODES = new ConcurrentHashMap<>();
     
     static {
+        // English
         LANGUAGE_CODES.put("english", "en");
+        
+        // Indian Languages
+        LANGUAGE_CODES.put("hindi", "hi");
+        LANGUAGE_CODES.put("tamil", "ta");
+        LANGUAGE_CODES.put("telugu", "te");
+        LANGUAGE_CODES.put("kannada", "kn");
+        LANGUAGE_CODES.put("malayalam", "ml");
+        LANGUAGE_CODES.put("bengali", "bn");
+        LANGUAGE_CODES.put("marathi", "mr");
+        LANGUAGE_CODES.put("gujarati", "gu");
+        LANGUAGE_CODES.put("punjabi", "pa");
+        LANGUAGE_CODES.put("odia", "or");
+        LANGUAGE_CODES.put("assamese", "as");
+        LANGUAGE_CODES.put("urdu", "ur");
+        
+        // Other Languages
         LANGUAGE_CODES.put("arabic", "ar");
         LANGUAGE_CODES.put("korean", "ko");
         LANGUAGE_CODES.put("chinese", "zh");
-        LANGUAGE_CODES.put("tamil", "ta");
-        LANGUAGE_CODES.put("hindi", "hi");
+        LANGUAGE_CODES.put("spanish", "es");
+        LANGUAGE_CODES.put("french", "fr");
+        LANGUAGE_CODES.put("german", "de");
+        LANGUAGE_CODES.put("japanese", "ja");
         LANGUAGE_CODES.put("auto", "auto");
     }
     
@@ -68,6 +87,12 @@ public class TranslationService {
             
             logger.info("[Translation Service] Language codes - Source: {}, Target: {}", sourceCode, targetCode);
             
+            // Check if the language pair is directly supported
+            if (!isLanguagePairSupported(sourceLanguage, targetLanguage)) {
+                logger.info("[Translation Service] Language pair not directly supported, using English as intermediate");
+                return translateViaEnglish(text, sourceLanguage, targetLanguage);
+            }
+            
             TranslateTextRequest request = TranslateTextRequest.builder()
                     .text(text)
                     .sourceLanguageCode(sourceCode)
@@ -86,6 +111,13 @@ public class TranslationService {
             
         } catch (TranslateException e) {
             logger.error("Translation failed: {}", e.getMessage());
+            
+            // Check if it's an unsupported language pair
+            if (e.getMessage().contains("Unsupported language pair")) {
+                logger.warn("Unsupported language pair: {} to {}. Attempting fallback translation via English", sourceLanguage, targetLanguage);
+                return translateViaEnglish(text, sourceLanguage, targetLanguage);
+            }
+            
             throw new TranslationException("Failed to translate text", e);
         }
     }
@@ -348,6 +380,43 @@ public class TranslationService {
     }
     
     /**
+     * Check if a language pair is supported for direct translation.
+     * 
+     * @param sourceLanguage The source language
+     * @param targetLanguage The target language
+     * @return true if the language pair is supported, false otherwise
+     */
+    public boolean isLanguagePairSupported(String sourceLanguage, String targetLanguage) {
+        // Common supported language pairs for Indian languages
+        String[] supportedPairs = {
+            "en-hi", "hi-en",    // English-Hindi
+            "en-ta", "ta-en",    // English-Tamil
+            "en-te", "te-en",    // English-Telugu
+            "en-kn", "kn-en",    // English-Kannada
+            "en-ml", "ml-en",    // English-Malayalam
+            "en-bn", "bn-en",    // English-Bengali
+            "en-mr", "mr-en",    // English-Marathi
+            "en-gu", "gu-en",    // English-Gujarati
+            "en-pa", "pa-en",    // English-Punjabi
+            "en-ur", "ur-en",    // English-Urdu
+            // Note: Odia (or) and Assamese (as) have limited support
+        };
+        
+        String sourceCode = getLanguageCode(sourceLanguage);
+        String targetCode = getLanguageCode(targetLanguage);
+        String pair = sourceCode + "-" + targetCode;
+        
+        for (String supportedPair : supportedPairs) {
+            if (supportedPair.equals(pair)) {
+                return true;
+            }
+        }
+        
+        logger.warn("[Translation Service] Language pair not in supported list: {} to {}", sourceLanguage, targetLanguage);
+        return false;
+    }
+    
+    /**
      * Custom exception for translation errors.
      */
     public static class TranslationException extends Exception {
@@ -357,6 +426,61 @@ public class TranslationService {
         
         public TranslationException(String message, Throwable cause) {
             super(message, cause);
+        }
+    }
+
+    /**
+     * Translate text via English as an intermediate step for unsupported language pairs.
+     * This is a fallback method when direct translation is not supported.
+     * 
+     * @param text The text to translate
+     * @param sourceLanguage The source language
+     * @param targetLanguage The target language
+     * @return The translated text
+     * @throws TranslationException if translation fails
+     */
+    private String translateViaEnglish(String text, String sourceLanguage, String targetLanguage) throws TranslationException {
+        logger.info("[Translation Service] Using English as intermediate language for {} to {}", sourceLanguage, targetLanguage);
+        
+        try {
+            // Step 1: Translate from source language to English
+            String sourceCode = getLanguageCode(sourceLanguage);
+            String englishCode = "en";
+            
+            logger.info("[Translation Service] Step 1: Translating {} to English", sourceLanguage);
+            TranslateTextRequest request1 = TranslateTextRequest.builder()
+                    .text(text)
+                    .sourceLanguageCode(sourceCode)
+                    .targetLanguageCode(englishCode)
+                    .build();
+            
+            TranslateTextResponse response1 = translateClient.translateText(request1);
+            String englishText = response1.translatedText();
+            logger.info("[Translation Service] Step 1 completed: {} -> English", sourceLanguage);
+            
+            // Step 2: Translate from English to target language
+            String targetCode = getLanguageCode(targetLanguage);
+            
+            logger.info("[Translation Service] Step 2: Translating English to {}", targetLanguage);
+            TranslateTextRequest request2 = TranslateTextRequest.builder()
+                    .text(englishText)
+                    .sourceLanguageCode(englishCode)
+                    .targetLanguageCode(targetCode)
+                    .build();
+            
+            TranslateTextResponse response2 = translateClient.translateText(request2);
+            String finalText = response2.translatedText();
+            logger.info("[Translation Service] Step 2 completed: English -> {}", targetLanguage);
+            
+            logger.info("[Translation Service] Fallback translation completed successfully!");
+            logger.info("[Translation Service] Original: {} chars, English: {} chars, Final: {} chars", 
+                       text.length(), englishText.length(), finalText.length());
+            
+            return finalText;
+            
+        } catch (TranslateException e) {
+            logger.error("[Translation Service] Fallback translation failed: {}", e.getMessage());
+            throw new TranslationException("Fallback translation via English failed", e);
         }
     }
 } 

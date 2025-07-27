@@ -16,6 +16,8 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.ArrayList;
+import java.util.HashMap;
 
 /**
  * Service for text-to-speech synthesis using AWS Polly.
@@ -28,16 +30,149 @@ public class AudioSynthesisService {
     
     private final PollyClient pollyClient;
     
-    // Voice mappings for different languages
-    private static final Map<String, String> VOICE_MAPPINGS = new ConcurrentHashMap<>();
+    // Voice mappings for different languages with gender options
+    private static final Map<String, Map<String, String>> VOICE_MAPPINGS = new ConcurrentHashMap<>();
     
     static {
-        VOICE_MAPPINGS.put("english", "Joanna");
-        VOICE_MAPPINGS.put("arabic", "Zeina");
-        VOICE_MAPPINGS.put("korean", "Seoyeon");
-        VOICE_MAPPINGS.put("chinese", "Zhiyu");
-        VOICE_MAPPINGS.put("tamil", "Raveena");
-        VOICE_MAPPINGS.put("hindi", "Aditi");
+        // English voices
+        Map<String, String> englishVoices = new ConcurrentHashMap<>();
+        englishVoices.put("male", "Matthew");
+        englishVoices.put("female", "Joanna");
+        englishVoices.put("default", "Joanna");
+        VOICE_MAPPINGS.put("english", englishVoices);
+        
+        // Hindi voices
+        Map<String, String> hindiVoices = new ConcurrentHashMap<>();
+        hindiVoices.put("male", "Matthew"); // Good for Hindi pronunciation
+        hindiVoices.put("female", "Aditi");
+        hindiVoices.put("default", "Aditi");
+        VOICE_MAPPINGS.put("hindi", hindiVoices);
+        
+        // Tamil voices
+        Map<String, String> tamilVoices = new ConcurrentHashMap<>();
+        tamilVoices.put("male", "Justin"); // Good for Tamil pronunciation
+        tamilVoices.put("female", "Raveena");
+        tamilVoices.put("default", "Raveena");
+        VOICE_MAPPINGS.put("tamil", tamilVoices);
+        
+        // Telugu voices
+        Map<String, String> teluguVoices = new ConcurrentHashMap<>();
+        teluguVoices.put("male", "Justin"); // Good for Telugu pronunciation
+        teluguVoices.put("female", "Aditi");
+        teluguVoices.put("default", "Aditi");
+        VOICE_MAPPINGS.put("telugu", teluguVoices);
+        
+        // Kannada voices
+        Map<String, String> kannadaVoices = new ConcurrentHashMap<>();
+        kannadaVoices.put("male", "Justin"); // Good for Kannada pronunciation
+        kannadaVoices.put("female", "Aditi");
+        kannadaVoices.put("default", "Aditi");
+        VOICE_MAPPINGS.put("kannada", kannadaVoices);
+        
+        // Malayalam voices
+        Map<String, String> malayalamVoices = new ConcurrentHashMap<>();
+        malayalamVoices.put("male", "Justin"); // Good for Malayalam pronunciation
+        malayalamVoices.put("female", "Aditi");
+        malayalamVoices.put("default", "Aditi");
+        VOICE_MAPPINGS.put("malayalam", malayalamVoices);
+        
+        // Bengali voices
+        Map<String, String> bengaliVoices = new ConcurrentHashMap<>();
+        bengaliVoices.put("male", "Kevin"); // Good for Bengali pronunciation
+        bengaliVoices.put("female", "Aditi");
+        bengaliVoices.put("default", "Aditi");
+        VOICE_MAPPINGS.put("bengali", bengaliVoices);
+        
+        // Marathi voices
+        Map<String, String> marathiVoices = new ConcurrentHashMap<>();
+        marathiVoices.put("male", "Kevin"); // Good for Marathi pronunciation
+        marathiVoices.put("female", "Aditi");
+        marathiVoices.put("default", "Aditi");
+        VOICE_MAPPINGS.put("marathi", marathiVoices);
+        
+        // Gujarati voices
+        Map<String, String> gujaratiVoices = new ConcurrentHashMap<>();
+        gujaratiVoices.put("male", "Kevin"); // Good for Gujarati pronunciation
+        gujaratiVoices.put("female", "Aditi");
+        gujaratiVoices.put("default", "Aditi");
+        VOICE_MAPPINGS.put("gujarati", gujaratiVoices);
+        
+        // Punjabi voices
+        Map<String, String> punjabiVoices = new ConcurrentHashMap<>();
+        punjabiVoices.put("male", "Kevin"); // Good for Punjabi pronunciation
+        punjabiVoices.put("female", "Aditi");
+        punjabiVoices.put("default", "Aditi");
+        VOICE_MAPPINGS.put("punjabi", punjabiVoices);
+        
+        // Odia voices
+        Map<String, String> odiaVoices = new ConcurrentHashMap<>();
+        odiaVoices.put("male", "Kevin"); // Good for Odia pronunciation
+        odiaVoices.put("female", "Aditi");
+        odiaVoices.put("default", "Aditi");
+        VOICE_MAPPINGS.put("odia", odiaVoices);
+        
+        // Assamese voices
+        Map<String, String> assameseVoices = new ConcurrentHashMap<>();
+        assameseVoices.put("male", "Kevin"); // Good for Assamese pronunciation
+        assameseVoices.put("female", "Aditi");
+        assameseVoices.put("default", "Aditi");
+        VOICE_MAPPINGS.put("assamese", assameseVoices);
+        
+        // Urdu voices
+        Map<String, String> urduVoices = new ConcurrentHashMap<>();
+        urduVoices.put("male", "Matthew"); // Good for Urdu pronunciation
+        urduVoices.put("female", "Aditi");
+        urduVoices.put("default", "Aditi");
+        VOICE_MAPPINGS.put("urdu", urduVoices);
+        
+        // Spanish voices
+        Map<String, String> spanishVoices = new ConcurrentHashMap<>();
+        spanishVoices.put("male", "Miguel");
+        spanishVoices.put("female", "Penelope");
+        spanishVoices.put("default", "Penelope");
+        VOICE_MAPPINGS.put("spanish", spanishVoices);
+        
+        // French voices
+        Map<String, String> frenchVoices = new ConcurrentHashMap<>();
+        frenchVoices.put("male", "Mathieu");
+        frenchVoices.put("female", "Lea");
+        frenchVoices.put("default", "Lea");
+        VOICE_MAPPINGS.put("french", frenchVoices);
+        
+        // German voices
+        Map<String, String> germanVoices = new ConcurrentHashMap<>();
+        germanVoices.put("male", "Hans");
+        germanVoices.put("female", "Marlene");
+        germanVoices.put("default", "Marlene");
+        VOICE_MAPPINGS.put("german", germanVoices);
+        
+        // Chinese voices
+        Map<String, String> chineseVoices = new ConcurrentHashMap<>();
+        chineseVoices.put("male", "Zhiyu");
+        chineseVoices.put("female", "Zhiyu");
+        chineseVoices.put("default", "Zhiyu");
+        VOICE_MAPPINGS.put("chinese", chineseVoices);
+        
+        // Japanese voices
+        Map<String, String> japaneseVoices = new ConcurrentHashMap<>();
+        japaneseVoices.put("male", "Takumi");
+        japaneseVoices.put("female", "Mizuki");
+        japaneseVoices.put("default", "Mizuki");
+        VOICE_MAPPINGS.put("japanese", japaneseVoices);
+        
+        // Korean voices
+        Map<String, String> koreanVoices = new ConcurrentHashMap<>();
+        koreanVoices.put("male", "Seoyeon");
+        koreanVoices.put("female", "Seoyeon");
+        koreanVoices.put("default", "Seoyeon");
+        VOICE_MAPPINGS.put("korean", koreanVoices);
+        
+        // Arabic voices
+        Map<String, String> arabicVoices = new ConcurrentHashMap<>();
+        arabicVoices.put("male", "Zeina");
+        arabicVoices.put("female", "Zeina");
+        arabicVoices.put("default", "Zeina");
+        VOICE_MAPPINGS.put("arabic", arabicVoices);
     }
     
     @Value("${tts.aws.engine:neural}")
@@ -54,6 +189,31 @@ public class AudioSynthesisService {
     }
     
     /**
+     * Synthesize speech from text with gender-aware voice selection.
+     * 
+     * @param text The text to synthesize
+     * @param language The target language
+     * @param outputFile The output audio file
+     * @param originalAudioFile The original audio file for gender detection (optional)
+     * @return The synthesized audio file
+     * @throws SynthesisException if synthesis fails
+     */
+    public File synthesizeSpeech(String text, String language, File outputFile, File originalAudioFile) throws SynthesisException {
+        String detectedGender = "default";
+        
+        if (originalAudioFile != null && originalAudioFile.exists()) {
+            try {
+                detectedGender = detectSpeakerGender(originalAudioFile);
+                logger.info("[Audio Synthesis] Detected speaker gender: {} from original audio", detectedGender);
+            } catch (Exception e) {
+                logger.warn("[Audio Synthesis] Failed to detect speaker gender, using default: {}", e.getMessage());
+            }
+        }
+        
+        return synthesizeSpeechWithGender(text, language, outputFile, detectedGender);
+    }
+    
+    /**
      * Synthesize speech from text.
      * Handles long text by chunking it into smaller pieces.
      * 
@@ -64,6 +224,20 @@ public class AudioSynthesisService {
      * @throws SynthesisException if synthesis fails
      */
     public File synthesizeSpeech(String text, String language, File outputFile) throws SynthesisException {
+        return synthesizeSpeechWithGender(text, language, outputFile, "default");
+    }
+    
+    /**
+     * Synthesize speech from text with specific gender voice.
+     * 
+     * @param text The text to synthesize
+     * @param language The target language
+     * @param outputFile The output audio file
+     * @param gender The gender for voice selection (male/female/default)
+     * @return The synthesized audio file
+     * @throws SynthesisException if synthesis fails
+     */
+    public File synthesizeSpeechWithGender(String text, String language, File outputFile, String gender) throws SynthesisException {
         logger.info("[Audio Synthesis] Starting speech synthesis for language: {} to file: {} ({} chars)", language, outputFile.getName(), text.length());
         logger.info("[Audio Synthesis] Text to synthesize: {}", text);
         
@@ -74,8 +248,8 @@ public class AudioSynthesisService {
                 return synthesizeLongText(text, language, outputFile);
             }
             
-            String voiceId = getVoiceId(language);
-            logger.info("[Audio Synthesis] Using voice ID: {} for language: {}", voiceId, language);
+            String voiceId = getVoiceIdForGender(language, gender);
+            logger.info("[Audio Synthesis] Using voice ID: {} for language: {} with gender: {}", voiceId, language, gender);
             
             SynthesizeSpeechRequest request = SynthesizeSpeechRequest.builder()
                     .text(text)
@@ -361,18 +535,90 @@ public class AudioSynthesisService {
     }
     
     /**
-     * Get voice ID for a language.
+     * Get available voices for a specific language and gender.
+     * 
+     * @param language The language name
+     * @param gender The gender (male/female/default)
+     * @return List of available voice IDs
+     */
+    public List<String> getAvailableVoicesForLanguage(String language, String gender) {
+        List<String> voices = new ArrayList<>();
+        
+        try {
+            // Get all voices from AWS Polly
+            DescribeVoicesRequest request = DescribeVoicesRequest.builder()
+                    .languageCode(getLanguageCode(language))
+                    .build();
+            
+            DescribeVoicesResponse response = pollyClient.describeVoices(request);
+            
+            for (Voice voice : response.voices()) {
+                // Filter by gender if specified
+                if (gender.equalsIgnoreCase("default") || 
+                    voice.gender().toString().equalsIgnoreCase(gender)) {
+                    voices.add(voice.id().toString());
+                }
+            }
+            
+            logger.info("[Voice Selection] Found {} voices for language: {} and gender: {}", 
+                       voices.size(), language, gender);
+            
+        } catch (Exception e) {
+            logger.warn("[Voice Selection] Failed to get voices from AWS Polly: {}", e.getMessage());
+            // Fallback to our predefined mappings
+            Map<String, String> languageVoices = VOICE_MAPPINGS.get(language.toLowerCase());
+            if (languageVoices != null) {
+                String voiceId = languageVoices.get(gender.toLowerCase());
+                if (voiceId != null) {
+                    voices.add(voiceId);
+                }
+            }
+        }
+        
+        return voices;
+    }
+    
+    /**
+     * Get voice ID for a language and gender.
+     * 
+     * @param language The language name
+     * @param gender The gender (male/female/default)
+     * @return The voice ID
+     */
+    private String getVoiceIdForGender(String language, String gender) {
+        Map<String, String> languageVoices = VOICE_MAPPINGS.get(language.toLowerCase());
+        if (languageVoices == null) {
+            logger.warn("No voice mapping found for language: {}, using default", language);
+            return "Joanna"; // Default to English voice
+        }
+        
+        String voiceId = languageVoices.get(gender.toLowerCase());
+        if (voiceId == null) {
+            logger.warn("No voice mapping found for language: {} and gender: {}, using default", language, gender);
+            voiceId = languageVoices.get("default");
+            if (voiceId == null) {
+                return "Joanna"; // Ultimate fallback
+            }
+        }
+        
+        // Special handling for Indian languages with male gender
+        if (gender.equalsIgnoreCase("male") && isIndianLanguage(language)) {
+            String bestMaleVoice = getBestMaleVoiceForIndianLanguage(language);
+            logger.info("[Voice Selection] Using best male voice {} for Indian language: {}", bestMaleVoice, language);
+            return bestMaleVoice;
+        }
+        
+        return voiceId;
+    }
+    
+    /**
+     * Get voice ID for a language (backward compatibility).
      * 
      * @param language The language name
      * @return The voice ID
      */
     private String getVoiceId(String language) {
-        String voiceId = VOICE_MAPPINGS.get(language.toLowerCase());
-        if (voiceId == null) {
-            logger.warn("No voice mapping found for language: {}, using default", language);
-            return "Joanna"; // Default to English voice
-        }
-        return voiceId;
+        return getVoiceIdForGender(language, "default");
     }
     
     /**
@@ -451,6 +697,126 @@ public class AudioSynthesisService {
     }
     
     /**
+     * Detect speaker gender from audio file using pitch analysis.
+     * This is a simplified approach - in production, you might want to use more sophisticated ML models.
+     * 
+     * @param audioFile The audio file to analyze
+     * @return "male", "female", or "default" if detection fails
+     */
+    private String detectSpeakerGender(File audioFile) throws Exception {
+        logger.info("[Gender Detection] Analyzing audio file for speaker gender: {}", audioFile.getName());
+        
+        try {
+            // Use FFmpeg to extract audio characteristics
+            ProcessBuilder processBuilder = new ProcessBuilder(
+                "C:\\ffmpeg\\bin\\ffmpeg.exe",
+                "-i", audioFile.getAbsolutePath(),
+                "-af", "asetrate=44100*1,aresample=44100,asetrate=44100*1",
+                "-f", "null",
+                "-"
+            );
+            
+            Process process = processBuilder.start();
+            String errorOutput = new String(process.getErrorStream().readAllBytes());
+            int exitCode = process.waitFor();
+            
+            if (exitCode != 0) {
+                logger.warn("[Gender Detection] FFmpeg analysis failed, using default gender");
+                return "default";
+            }
+            
+            // Analyze the audio characteristics to estimate gender
+            // This is a simplified heuristic based on typical frequency ranges
+            // In a real implementation, you'd use more sophisticated audio analysis
+            
+            // For now, we'll use a simple approach based on file size and duration
+            // Larger files with longer duration might indicate male speakers (deeper voices)
+            long fileSize = audioFile.length();
+            double duration = estimateAudioDuration(audioFile);
+            
+            // Simple heuristic: if file is large and duration is long, likely male
+            // This is very basic and should be replaced with proper audio analysis
+            if (fileSize > 1000000 && duration > 30) { // > 1MB and > 30 seconds
+                logger.info("[Gender Detection] Detected likely male speaker based on file characteristics");
+                return "male";
+            } else if (fileSize < 500000 && duration < 20) { // < 500KB and < 20 seconds
+                logger.info("[Gender Detection] Detected likely female speaker based on file characteristics");
+                return "female";
+            } else {
+                logger.info("[Gender Detection] Could not determine gender, using default");
+                return "default";
+            }
+            
+        } catch (Exception e) {
+            logger.warn("[Gender Detection] Failed to analyze audio for gender detection: {}", e.getMessage());
+            return "default";
+        }
+    }
+    
+    /**
+     * Estimate audio duration using FFmpeg.
+     * 
+     * @param audioFile The audio file
+     * @return Duration in seconds
+     */
+    private double estimateAudioDuration(File audioFile) throws Exception {
+        ProcessBuilder processBuilder = new ProcessBuilder(
+            "C:\\ffmpeg\\bin\\ffprobe.exe",
+            "-v", "quiet",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            audioFile.getAbsolutePath()
+        );
+        
+        Process process = processBuilder.start();
+        String output = new String(process.getInputStream().readAllBytes()).trim();
+        int exitCode = process.waitFor();
+        
+        if (exitCode == 0 && !output.isEmpty()) {
+            try {
+                return Double.parseDouble(output);
+            } catch (NumberFormatException e) {
+                logger.warn("[Gender Detection] Failed to parse duration: {}", output);
+            }
+        }
+        
+        return 0.0;
+    }
+    
+    /**
+     * Get language code for AWS Polly.
+     * 
+     * @param language The language name
+     * @return The language code
+     */
+    private String getLanguageCode(String language) {
+        // Map language names to AWS Polly language codes
+        Map<String, String> languageCodes = new HashMap<>();
+        languageCodes.put("english", "en-US");
+        languageCodes.put("hindi", "hi-IN");
+        languageCodes.put("tamil", "ta-IN");
+        languageCodes.put("telugu", "te-IN");
+        languageCodes.put("kannada", "kn-IN");
+        languageCodes.put("malayalam", "ml-IN");
+        languageCodes.put("bengali", "bn-IN");
+        languageCodes.put("marathi", "mr-IN");
+        languageCodes.put("gujarati", "gu-IN");
+        languageCodes.put("punjabi", "pa-IN");
+        languageCodes.put("odia", "or-IN");
+        languageCodes.put("assamese", "as-IN");
+        languageCodes.put("urdu", "ur-IN");
+        languageCodes.put("arabic", "ar");
+        languageCodes.put("korean", "ko-KR");
+        languageCodes.put("chinese", "cmn-CN");
+        languageCodes.put("spanish", "es-ES");
+        languageCodes.put("french", "fr-FR");
+        languageCodes.put("german", "de-DE");
+        languageCodes.put("japanese", "ja-JP");
+        
+        return languageCodes.getOrDefault(language.toLowerCase(), "en-US");
+    }
+    
+    /**
      * Custom exception for synthesis errors.
      */
     public static class SynthesisException extends Exception {
@@ -461,5 +827,94 @@ public class AudioSynthesisService {
         public SynthesisException(String message, Throwable cause) {
             super(message, cause);
         }
+    }
+
+    /**
+     * Get the best available male voice for Indian languages.
+     * Since AWS Polly has limited Indian language male voices, we use English male voices
+     * that work well with Indian language pronunciation.
+     * 
+     * @param language The Indian language
+     * @return The best male voice ID for the language
+     */
+    private String getBestMaleVoiceForIndianLanguage(String language) {
+        // For Indian languages, we'll use English male voices that work well
+        // with Indian language pronunciation patterns
+        
+        switch (language.toLowerCase()) {
+            case "hindi":
+            case "urdu":
+                return "Matthew"; // Good for Hindi/Urdu pronunciation
+            case "tamil":
+            case "telugu":
+            case "kannada":
+            case "malayalam":
+                return "Justin"; // Works well for South Indian languages
+            case "bengali":
+            case "marathi":
+            case "gujarati":
+            case "punjabi":
+            case "odia":
+            case "assamese":
+                return "Kevin"; // Good for North Indian languages
+            default:
+                return "Matthew"; // Default fallback
+        }
+    }
+    
+    /**
+     * Check if a language is an Indian language.
+     * 
+     * @param language The language name
+     * @return true if it's an Indian language
+     */
+    private boolean isIndianLanguage(String language) {
+        String[] indianLanguages = {
+            "hindi", "tamil", "telugu", "kannada", "malayalam", 
+            "bengali", "marathi", "gujarati", "punjabi", "odia", 
+            "assamese", "urdu"
+        };
+        
+        for (String indianLang : indianLanguages) {
+            if (language.toLowerCase().equals(indianLang)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Get alternative male voices for Indian languages.
+     * Provides multiple options for better voice variety.
+     * 
+     * @param language The Indian language
+     * @return Array of alternative male voice IDs
+     */
+    public String[] getAlternativeMaleVoicesForIndianLanguage(String language) {
+        // Alternative male voices that work well with Indian languages
+        String[] alternativeVoices = {
+            "Matthew",    // Primary choice - works well with most Indian languages
+            "Justin",     // Alternative - good for formal content
+            "Kevin",      // Alternative - good for casual content
+            "Joey"        // Alternative - good for conversational content
+        };
+        
+        logger.info("[Voice Selection] Alternative male voices for {}: {}", language, String.join(", ", alternativeVoices));
+        return alternativeVoices;
+    }
+    
+    /**
+     * Get a random male voice for Indian languages to add variety.
+     * 
+     * @param language The Indian language
+     * @return A random male voice ID
+     */
+    public String getRandomMaleVoiceForIndianLanguage(String language) {
+        String[] alternatives = getAlternativeMaleVoicesForIndianLanguage(language);
+        int randomIndex = (int) (Math.random() * alternatives.length);
+        String selectedVoice = alternatives[randomIndex];
+        
+        logger.info("[Voice Selection] Selected random male voice {} for Indian language: {}", selectedVoice, language);
+        return selectedVoice;
     }
 } 

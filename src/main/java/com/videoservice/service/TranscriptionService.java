@@ -74,10 +74,16 @@ public class TranscriptionService {
         logger.info("[Transcription] Audio file size: {} bytes", audioFile.length());
         
         try {
+            // Validate the audio file
+            validateAudioFile(audioFile);
+            
+            // Convert audio to a compatible format for AWS Transcribe
+            File convertedAudioFile = convertAudioForTranscription(audioFile);
+            
             // Upload audio file to S3 for transcription
             String s3Key = "transcription/" + UUID.randomUUID() + "/" + audioFile.getName();
             logger.info("[Transcription] Uploading audio to S3: {}", s3Key);
-            uploadAudioToS3(audioFile, s3Key);
+            uploadAudioToS3(convertedAudioFile, s3Key);
             
             // Call the S3-based transcription method
             return transcribeAudioFromS3(s3Key, languageCode);
@@ -668,6 +674,26 @@ public class TranscriptionService {
                 logger.error("[Transcription] Exception type: {}", e.getClass().getSimpleName());
                 logger.error("[Transcription] Full exception details:", e);
                 
+                // Check for specific "invalid media file" error
+                if (e.getMessage().contains("isn't valid") || e.getMessage().contains("invalid media file")) {
+                    logger.error("[Transcription] INVALID MEDIA FILE ERROR DETECTED");
+                    logger.error("[Transcription] This usually means:");
+                    logger.error("[Transcription] 1. Audio file is corrupted or has no audio content");
+                    logger.error("[Transcription] 2. Audio format is not supported by AWS Transcribe");
+                    logger.error("[Transcription] 3. Audio file is too short or too long");
+                    logger.error("[Transcription] 4. Audio file has invalid encoding");
+                    
+                    // Try to get more information about the file
+                    try {
+                        logger.info("[Transcription] Attempting to analyze the problematic file...");
+                        analyzeProblematicFile(s3Key);
+                    } catch (Exception analysisError) {
+                        logger.error("[Transcription] File analysis failed: {}", analysisError.getMessage());
+                    }
+                    
+                    throw new Exception("Invalid media file detected. Please check that your audio file contains valid audio content and is in a supported format (MP3, WAV, FLAC, M4A). Error: " + e.getMessage(), e);
+                }
+                
                 // Try to verify the file one more time after the error
                 try {
                     logger.info("[Transcription] Re-verifying S3 file after error...");
@@ -701,6 +727,332 @@ public class TranscriptionService {
             logger.error("AWS Transcribe failed. Please check your AWS credentials and permissions.");
             logger.error("Required permissions: transcribe:StartTranscriptionJob, transcribe:GetTranscriptionJob, s3:PutObject, s3:GetObject");
             throw new Exception("AWS Transcribe failed: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * Validate audio file before transcription.
+     * 
+     * @param audioFile The audio file to validate
+     * @throws Exception if validation fails
+     */
+    private void validateAudioFile(File audioFile) throws Exception {
+        logger.info("[Audio Validation] Starting validation for: {}", audioFile.getName());
+        
+        // Check if file exists
+        if (!audioFile.exists()) {
+            throw new Exception("Audio file does not exist: " + audioFile.getAbsolutePath());
+        }
+        
+        // Check if file is readable
+        if (!audioFile.canRead()) {
+            throw new Exception("Audio file is not readable: " + audioFile.getAbsolutePath());
+        }
+        
+        // Check file size
+        long fileSize = audioFile.length();
+        logger.info("[Audio Validation] File size: {} bytes", fileSize);
+        
+        if (fileSize == 0) {
+            throw new Exception("Audio file is empty: " + audioFile.getAbsolutePath());
+        }
+        
+        if (fileSize < 1024) {
+            logger.warn("[Audio Validation] File is very small ({} bytes), may contain no audio", fileSize);
+        }
+        
+        if (fileSize > 100 * 1024 * 1024) { // 100MB limit
+            throw new Exception("Audio file is too large (" + fileSize + " bytes). Maximum size is 100MB");
+        }
+        
+        // Check file extension
+        String fileName = audioFile.getName().toLowerCase();
+        if (!fileName.endsWith(".mp3") && !fileName.endsWith(".wav") && 
+            !fileName.endsWith(".flac") && !fileName.endsWith(".m4a") && 
+            !fileName.endsWith(".mp4") && !fileName.endsWith(".avi") && 
+            !fileName.endsWith(".mov") && !fileName.endsWith(".mkv")) {
+            throw new Exception("Unsupported audio/video format: " + fileName + ". Supported formats: mp3, wav, flac, m4a, mp4, avi, mov, mkv");
+        }
+        
+        // Try to validate audio content using FFmpeg
+        validateAudioContent(audioFile);
+        
+        logger.info("[Audio Validation] File validation passed: {}", audioFile.getName());
+    }
+    
+    /**
+     * Validate audio content using FFmpeg.
+     * 
+     * @param audioFile The audio file to validate
+     * @throws Exception if validation fails
+     */
+    private void validateAudioContent(File audioFile) throws Exception {
+        try {
+            logger.info("[Audio Validation] Validating audio content with FFmpeg");
+            
+            ProcessBuilder processBuilder = new ProcessBuilder(
+                "C:\\ffmpeg\\bin\\ffprobe.exe",
+                "-v", "quiet",
+                "-show_entries", "format=duration,size",
+                "-show_streams",
+                "-select_streams", "a:0",
+                "-of", "json",
+                audioFile.getAbsolutePath()
+            );
+            
+            Process process = processBuilder.start();
+            String output = new String(process.getInputStream().readAllBytes());
+            String errorOutput = new String(process.getErrorStream().readAllBytes());
+            int exitCode = process.waitFor();
+            
+            if (exitCode != 0) {
+                logger.error("[Audio Validation] FFprobe failed with exit code: {}", exitCode);
+                logger.error("[Audio Validation] Error output: {}", errorOutput);
+                throw new Exception("Invalid audio file: FFprobe validation failed. Error: " + errorOutput);
+            }
+            
+            // Check if output contains audio stream information
+            if (!output.contains("\"codec_type\":\"audio\"")) {
+                throw new Exception("No audio stream found in file. File may be video-only or corrupted.");
+            }
+            
+            // Check duration
+            if (output.contains("\"duration\":")) {
+                String durationStr = output.split("\"duration\":\"")[1].split("\"")[0];
+                try {
+                    double duration = Double.parseDouble(durationStr);
+                    logger.info("[Audio Validation] Audio duration: {} seconds", duration);
+                    
+                    if (duration < 0.5) {
+                        throw new Exception("Audio duration too short (" + duration + " seconds). Minimum duration is 0.5 seconds.");
+                    }
+                    
+                    if (duration > 3600) { // 1 hour limit
+                        throw new Exception("Audio duration too long (" + duration + " seconds). Maximum duration is 1 hour.");
+                    }
+                } catch (NumberFormatException e) {
+                    logger.warn("[Audio Validation] Could not parse duration: {}", durationStr);
+                }
+            }
+            
+            logger.info("[Audio Validation] Audio content validation passed");
+            
+        } catch (Exception e) {
+            if (e.getMessage().contains("Invalid audio file")) {
+                throw e; // Re-throw our custom validation errors
+            }
+            logger.warn("[Audio Validation] FFprobe validation failed, but continuing: {}", e.getMessage());
+            // Don't throw here - FFprobe might not be available, but we can still try transcription
+        }
+    }
+    
+    /**
+     * Convert audio file to a compatible format for AWS Transcribe.
+     * 
+     * @param audioFile The original audio file
+     * @return The converted audio file
+     * @throws Exception if conversion fails
+     */
+    private File convertAudioForTranscription(File audioFile) throws Exception {
+        logger.info("[Audio Conversion] Converting audio for AWS Transcribe compatibility");
+        
+        // Create temporary file for converted audio
+        File convertedFile = File.createTempFile("converted_", ".mp3");
+        convertedFile.deleteOnExit();
+        
+        try {
+            ProcessBuilder processBuilder = new ProcessBuilder(
+                "C:\\ffmpeg\\bin\\ffmpeg.exe",
+                "-i", audioFile.getAbsolutePath(),
+                "-acodec", "mp3",
+                "-ar", "16000",  // 16kHz sample rate
+                "-ac", "1",      // Mono channel
+                "-b:a", "128k",  // 128kbps bitrate
+                "-y",            // Overwrite output file
+                convertedFile.getAbsolutePath()
+            );
+            
+            logger.info("[Audio Conversion] FFmpeg command: {}", String.join(" ", processBuilder.command()));
+            
+            Process process = processBuilder.start();
+            
+            // Capture error output
+            StringBuilder errorOutput = new StringBuilder();
+            Thread errorReader = new Thread(() -> {
+                try {
+                    byte[] buffer = new byte[1024];
+                    int bytesRead;
+                    while ((bytesRead = process.getErrorStream().read(buffer)) != -1) {
+                        errorOutput.append(new String(buffer, 0, bytesRead));
+                    }
+                } catch (IOException e) {
+                    logger.warn("[Audio Conversion] Error reading FFmpeg error stream: {}", e.getMessage());
+                }
+            });
+            errorReader.start();
+            
+            // Wait for completion
+            boolean completed = process.waitFor(60, java.util.concurrent.TimeUnit.SECONDS);
+            
+            if (!completed) {
+                logger.error("[Audio Conversion] Audio conversion timed out");
+                process.destroyForcibly();
+                errorReader.interrupt();
+                throw new Exception("Audio conversion timed out");
+            }
+            
+            int exitCode = process.exitValue();
+            if (exitCode != 0) {
+                logger.error("[Audio Conversion] FFmpeg failed with exit code: {}", exitCode);
+                logger.error("[Audio Conversion] Error output: {}", errorOutput.toString());
+                throw new Exception("Audio conversion failed: " + errorOutput.toString());
+            }
+            
+            // Verify converted file
+            if (!convertedFile.exists() || convertedFile.length() == 0) {
+                throw new Exception("Converted audio file was not created or is empty");
+            }
+            
+            logger.info("[Audio Conversion] Audio conversion completed successfully");
+            logger.info("[Audio Conversion] Original: {} bytes, Converted: {} bytes", 
+                       audioFile.length(), convertedFile.length());
+            
+            return convertedFile;
+            
+        } catch (Exception e) {
+            // Clean up converted file if it exists
+            if (convertedFile.exists()) {
+                convertedFile.delete();
+            }
+            throw e;
+        }
+    }
+
+    /**
+     * Analyze a problematic audio file to help diagnose issues.
+     * 
+     * @param s3Key The S3 key of the problematic file
+     * @throws Exception if analysis fails
+     */
+    private void analyzeProblematicFile(String s3Key) throws Exception {
+        logger.info("[File Analysis] Analyzing problematic file: {}", s3Key);
+        
+        try {
+            // Download the file temporarily for analysis
+            File tempFile = File.createTempFile("analysis_", ".tmp");
+            tempFile.deleteOnExit();
+            
+            try {
+                // Download from S3
+                logger.info("[File Analysis] Downloading file from S3 for analysis...");
+                var response = s3Client.getObject(GetObjectRequest.builder().bucket(bucketName).key(s3Key).build());
+                Files.copy(response, tempFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                
+                logger.info("[File Analysis] File downloaded: {} bytes", tempFile.length());
+                
+                // Analyze with FFprobe
+                ProcessBuilder processBuilder = new ProcessBuilder(
+                    "C:\\ffmpeg\\bin\\ffprobe.exe",
+                    "-v", "error",
+                    "-show_entries", "format=duration,size,format_name",
+                    "-show_streams",
+                    "-of", "json",
+                    tempFile.getAbsolutePath()
+                );
+                
+                Process process = processBuilder.start();
+                String output = new String(process.getInputStream().readAllBytes());
+                String errorOutput = new String(process.getErrorStream().readAllBytes());
+                int exitCode = process.waitFor();
+                
+                logger.info("[File Analysis] FFprobe analysis results:");
+                logger.info("[File Analysis] Exit code: {}", exitCode);
+                logger.info("[File Analysis] Output: {}", output);
+                if (!errorOutput.isEmpty()) {
+                    logger.error("[File Analysis] Error output: {}", errorOutput);
+                }
+                
+                // Parse the JSON output for key information
+                if (output.contains("\"streams\"")) {
+                    logger.info("[File Analysis] File contains streams");
+                    
+                    // Check for audio streams
+                    if (output.contains("\"codec_type\":\"audio\"")) {
+                        logger.info("[File Analysis] Audio stream found");
+                        
+                        // Extract audio codec
+                        if (output.contains("\"codec_name\":")) {
+                            String codecName = output.split("\"codec_name\":\"")[1].split("\"")[0];
+                            logger.info("[File Analysis] Audio codec: {}", codecName);
+                        }
+                        
+                        // Extract sample rate
+                        if (output.contains("\"sample_rate\":")) {
+                            String sampleRate = output.split("\"sample_rate\":\"")[1].split("\"")[0];
+                            logger.info("[File Analysis] Sample rate: {} Hz", sampleRate);
+                        }
+                        
+                        // Extract channels
+                        if (output.contains("\"channels\":")) {
+                            String channels = output.split("\"channels\":")[1].split(",")[0];
+                            logger.info("[File Analysis] Channels: {}", channels);
+                        }
+                    } else {
+                        logger.error("[File Analysis] NO AUDIO STREAM FOUND - This is likely the problem!");
+                    }
+                    
+                    // Check for video streams
+                    if (output.contains("\"codec_type\":\"video\"")) {
+                        logger.info("[File Analysis] Video stream found");
+                    }
+                } else {
+                    logger.error("[File Analysis] No streams found in file - file may be corrupted");
+                }
+                
+                // Check duration
+                if (output.contains("\"duration\":")) {
+                    String durationStr = output.split("\"duration\":\"")[1].split("\"")[0];
+                    try {
+                        double duration = Double.parseDouble(durationStr);
+                        logger.info("[File Analysis] Duration: {} seconds", duration);
+                        
+                        if (duration < 0.5) {
+                            logger.error("[File Analysis] DURATION TOO SHORT - This may cause transcription failure");
+                        }
+                        
+                        if (duration > 3600) {
+                            logger.error("[File Analysis] DURATION TOO LONG - This may cause transcription failure");
+                        }
+                    } catch (NumberFormatException e) {
+                        logger.warn("[File Analysis] Could not parse duration: {}", durationStr);
+                    }
+                }
+                
+                // Check file size
+                if (output.contains("\"size\":")) {
+                    String sizeStr = output.split("\"size\":\"")[1].split("\"")[0];
+                    try {
+                        long size = Long.parseLong(sizeStr);
+                        logger.info("[File Analysis] File size: {} bytes", size);
+                        
+                        if (size < 1024) {
+                            logger.error("[File Analysis] FILE TOO SMALL - This may indicate no audio content");
+                        }
+                    } catch (NumberFormatException e) {
+                        logger.warn("[File Analysis] Could not parse size: {}", sizeStr);
+                    }
+                }
+                
+            } finally {
+                // Clean up temporary file
+                if (tempFile.exists()) {
+                    tempFile.delete();
+                }
+            }
+            
+        } catch (Exception e) {
+            logger.error("[File Analysis] Analysis failed: {}", e.getMessage());
+            throw e;
         }
     }
 } 

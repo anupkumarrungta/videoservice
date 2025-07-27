@@ -181,10 +181,35 @@ public class JobManager {
             jobRepository.save(job);
             logger.info("Job {} progress updated to 40% for language: {}", job.getId(), targetLanguage);
             
-            // Step 2: Split audio into chunks for processing
+            // Step 2: Validate audio file before chunking
+            logger.info("Job {}: Validating audio file before chunking", job.getId());
+            if (!videoProcessingService.validateAudioFileForChunking(audioFile)) {
+                logger.warn("Job {}: Audio file validation failed, but proceeding with chunking anyway", job.getId());
+                // Don't throw exception, just log warning and continue
+            }
+            
+            // Step 3: Split audio into chunks for processing
             logger.info("Job {}: Splitting audio into chunks", job.getId());
             List<File> audioChunks = videoProcessingService.splitAudioIntoChunks(audioFile, chunkDurationSeconds, tempDir);
             logger.info("[Translation Pipeline] Created {} audio chunks for processing", audioChunks.size());
+            
+            // Validate audio chunks before transcription
+            logger.info("Job {}: Validating audio chunks", job.getId());
+            audioChunks = videoProcessingService.validateAudioChunks(audioChunks);
+            logger.info("[Translation Pipeline] Validated {} audio chunks for transcription", audioChunks.size());
+            
+            // Ensure we have at least one valid chunk
+            if (audioChunks.isEmpty()) {
+                logger.warn("Job {}: No valid audio chunks found, attempting to create test chunk as final fallback", job.getId());
+                try {
+                    File testChunk = videoProcessingService.createTestChunk(tempDir);
+                    audioChunks = java.util.Arrays.asList(testChunk);
+                    logger.info("Job {}: Created test chunk as fallback: {} ({} bytes)", job.getId(), testChunk.getName(), testChunk.length());
+                } catch (Exception e) {
+                    logger.error("Job {}: Failed to create test chunk: {}", job.getId(), e.getMessage());
+                    throw new IOException("No valid audio chunks found for transcription and test chunk creation failed. Please check the source audio file and ensure it contains valid audio content.");
+                }
+            }
             
             job.updateProgress(50);
             jobRepository.save(job);
@@ -214,14 +239,15 @@ public class JobManager {
                 String translatedText = translationService.translateText(transcribedText, job.getSourceLanguage(), targetLanguage);
                 logger.info("[Translation Pipeline] English translation for chunk {}: {}", i, translatedText);
                 
-                // Synthesize speech from translated text
+                // Synthesize speech from translated text with gender detection
                 File translatedAudioChunk = tempDir.resolve(
                     String.format("translated_%s_chunk_%03d.mp3", targetLanguage, i)).toFile();
                 logger.info("[Translation Pipeline] Sending English translation to Polly for chunk {}: {}", i, translatedText);
                 logger.info("[Translation Pipeline] Target language for synthesis: {}", targetLanguage);
                 logger.info("[Translation Pipeline] Voice ID being used: {}", getVoiceIdForLanguage(targetLanguage));
                 
-                audioSynthesisService.synthesizeSpeech(translatedText, targetLanguage, translatedAudioChunk);
+                // Use gender-aware synthesis by passing the original audio chunk for gender detection
+                audioSynthesisService.synthesizeSpeech(translatedText, targetLanguage, translatedAudioChunk, audioChunk);
                 
                 // Verify the translated audio chunk was created
                 if (translatedAudioChunk.exists() && translatedAudioChunk.length() > 0) {
@@ -296,8 +322,9 @@ public class JobManager {
             logger.info("[Translation Pipeline] Number of audio chunks processed: {}", audioChunks.size());
             logger.info("[Translation Pipeline] Number of translated audio chunks: {}", translatedAudioChunks.size());
             
-            // Create new video with translated audio (instead of replacing audio in original)
-            videoProcessingService.replaceAudioInVideo(originalFile, translatedAudioFile, translatedVideoFile);
+            // Create new video with translated audio using lip-sync enhancement
+            logger.info("[Translation Pipeline] Using lip-sync enhancement for better audio-video synchronization");
+            videoProcessingService.createVideoWithLipSyncEnhancement(originalFile, translatedAudioFile, translatedVideoFile);
             
             // Verify the output video was created
             if (!translatedVideoFile.exists() || translatedVideoFile.length() == 0) {

@@ -126,30 +126,56 @@
 
         .languages-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 10px;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
             margin-top: 10px;
+        }
+
+        .language-section {
+            grid-column: 1 / -1;
+            margin-top: 15px;
+            margin-bottom: 10px;
+        }
+
+        .language-section-title {
+            font-weight: 600;
+            color: #333;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+            padding-bottom: 4px;
+            border-bottom: 2px solid #667eea;
         }
 
         .language-checkbox {
             display: flex;
             align-items: center;
             gap: 8px;
-            padding: 8px 12px;
+            padding: 10px 12px;
             background: #f8f9ff;
             border-radius: 8px;
             cursor: pointer;
             transition: all 0.3s ease;
+            border: 1px solid #e1e5e9;
         }
 
         .language-checkbox:hover {
             background: #e8f0ff;
+            border-color: #667eea;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
         }
 
         .language-checkbox input[type="checkbox"] {
             width: 18px;
             height: 18px;
             accent-color: #667eea;
+        }
+
+        .language-checkbox span {
+            font-weight: 500;
+            color: #333;
         }
 
         .submit-btn {
@@ -297,21 +323,101 @@
                 <select id="sourceLanguage" name="sourceLanguage">
                     <option value="auto">Auto Detect</option>
                     <option value="english">English</option>
+                    
+                    <!-- Indian Languages -->
+                    <option value="hindi">Hindi</option>
+                    <option value="tamil">Tamil</option>
+                    <option value="telugu">Telugu</option>
+                    <option value="kannada">Kannada</option>
+                    <option value="malayalam">Malayalam</option>
+                    <option value="bengali">Bengali</option>
+                    <option value="marathi">Marathi</option>
+                    <option value="gujarati">Gujarati</option>
+                    <option value="punjabi">Punjabi</option>
+                    <option value="odia">Odia</option>
+                    <option value="assamese">Assamese</option>
+                    <option value="urdu">Urdu</option>
+                    
+                    <!-- Other Languages -->
                     <option value="arabic">Arabic</option>
                     <option value="korean">Korean</option>
                     <option value="chinese">Chinese</option>
-                    <option value="tamil">Tamil</option>
-                    <option value="hindi">Hindi</option>
+                    <option value="spanish">Spanish</option>
+                    <option value="french">French</option>
+                    <option value="german">German</option>
+                    <option value="japanese">Japanese</option>
                 </select>
             </div>
 
             <div class="form-group">
                 <label>Target Languages *</label>
                 <div class="languages-grid" id="languagesGrid">
+                    <!-- English -->
+                    <div class="language-section">
+                        <div class="language-section-title">English</div>
+                    </div>
                     <label class="language-checkbox">
                         <input type="checkbox" name="targetLanguages" value="english" checked>
                         <span>English</span>
                     </label>
+                    
+                    <!-- Indian Languages -->
+                    <div class="language-section">
+                        <div class="language-section-title">Indian Languages</div>
+                    </div>
+                    <label class="language-checkbox">
+                        <input type="checkbox" name="targetLanguages" value="hindi">
+                        <span>Hindi</span>
+                    </label>
+                    <label class="language-checkbox">
+                        <input type="checkbox" name="targetLanguages" value="tamil">
+                        <span>Tamil</span>
+                    </label>
+                    <label class="language-checkbox">
+                        <input type="checkbox" name="targetLanguages" value="telugu">
+                        <span>Telugu</span>
+                    </label>
+                    <label class="language-checkbox">
+                        <input type="checkbox" name="targetLanguages" value="kannada">
+                        <span>Kannada</span>
+                    </label>
+                    <label class="language-checkbox">
+                        <input type="checkbox" name="targetLanguages" value="malayalam">
+                        <span>Malayalam</span>
+                    </label>
+                    <label class="language-checkbox">
+                        <input type="checkbox" name="targetLanguages" value="bengali">
+                        <span>Bengali</span>
+                    </label>
+                    <label class="language-checkbox">
+                        <input type="checkbox" name="targetLanguages" value="marathi">
+                        <span>Marathi</span>
+                    </label>
+                    <label class="language-checkbox">
+                        <input type="checkbox" name="targetLanguages" value="gujarati">
+                        <span>Gujarati</span>
+                    </label>
+                    <label class="language-checkbox">
+                        <input type="checkbox" name="targetLanguages" value="punjabi">
+                        <span>Punjabi</span>
+                    </label>
+                    <label class="language-checkbox">
+                        <input type="checkbox" name="targetLanguages" value="odia">
+                        <span>Odia</span>
+                    </label>
+                    <label class="language-checkbox">
+                        <input type="checkbox" name="targetLanguages" value="assamese">
+                        <span>Assamese</span>
+                    </label>
+                    <label class="language-checkbox">
+                        <input type="checkbox" name="targetLanguages" value="urdu">
+                        <span>Urdu</span>
+                    </label>
+                    
+                    <!-- Other Languages -->
+                    <div class="language-section">
+                        <div class="language-section-title">Other Languages</div>
+                    </div>
                     <label class="language-checkbox">
                         <input type="checkbox" name="targetLanguages" value="arabic">
                         <span>Arabic</span>
@@ -325,12 +431,20 @@
                         <span>Chinese</span>
                     </label>
                     <label class="language-checkbox">
-                        <input type="checkbox" name="targetLanguages" value="tamil">
-                        <span>Tamil</span>
+                        <input type="checkbox" name="targetLanguages" value="spanish">
+                        <span>Spanish</span>
                     </label>
                     <label class="language-checkbox">
-                        <input type="checkbox" name="targetLanguages" value="hindi">
-                        <span>Hindi</span>
+                        <input type="checkbox" name="targetLanguages" value="french">
+                        <span>French</span>
+                    </label>
+                    <label class="language-checkbox">
+                        <input type="checkbox" name="targetLanguages" value="german">
+                        <span>German</span>
+                    </label>
+                    <label class="language-checkbox">
+                        <input type="checkbox" name="targetLanguages" value="japanese">
+                        <span>Japanese</span>
                     </label>
                 </div>
             </div>

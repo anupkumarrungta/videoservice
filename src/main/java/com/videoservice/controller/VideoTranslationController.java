@@ -47,7 +47,7 @@ import software.amazon.awssdk.services.transcribe.model.ListTranscriptionJobsRes
  * Handles file uploads, translation requests, and job management.
  */
 @RestController
-@RequestMapping("/translation")
+@RequestMapping("/api/v1/translation")
 @CrossOrigin(origins = "*")
 public class VideoTranslationController {
     

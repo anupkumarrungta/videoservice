@@ -58,7 +58,7 @@ public class TranslationJob {
     @Column(name = "s3_processed_key")
     private String s3ProcessedKey;
     
-    @Column(name = "error_message")
+    @Column(name = "error_message", length = 2000)
     private String errorMessage;
     
     @Column(name = "created_at")

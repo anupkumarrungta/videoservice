@@ -38,6 +38,7 @@ public class JobManager {
     private final AudioSynthesisService audioSynthesisService;
     private final TranscriptionService transcriptionService;
     private final NotificationService notificationService;
+    private final ScriptGenerationService scriptGenerationService;
     private final TranslationJobRepository jobRepository;
     
     @Value("${audio.chunk-duration:180}")
@@ -59,6 +60,7 @@ public class JobManager {
                      AudioSynthesisService audioSynthesisService,
                      TranscriptionService transcriptionService,
                      NotificationService notificationService,
+                     ScriptGenerationService scriptGenerationService,
                      TranslationJobRepository jobRepository) {
         this.s3StorageService = s3StorageService;
         this.localStorageService = localStorageService;
@@ -67,6 +69,7 @@ public class JobManager {
         this.audioSynthesisService = audioSynthesisService;
         this.transcriptionService = transcriptionService;
         this.notificationService = notificationService;
+        this.scriptGenerationService = scriptGenerationService;
         this.jobRepository = jobRepository;
     }
     
@@ -218,6 +221,8 @@ public class JobManager {
             // Step 3: Process each audio chunk (transcribe, translate, synthesize)
             logger.info("Job {}: Processing {} audio chunks", job.getId(), audioChunks.size());
             List<File> translatedAudioChunks = new java.util.ArrayList<>();
+            List<String> sourceScripts = new java.util.ArrayList<>();
+            List<String> targetScripts = new java.util.ArrayList<>();
             String sourceLanguageCode = transcriptionService.getLanguageCode(job.getSourceLanguage());
             
             for (int i = 0; i < audioChunks.size(); i++) {
@@ -251,6 +256,12 @@ public class JobManager {
                 // Translate text
                 String translatedText = translationService.translateText(transcribedText, actualSourceLanguage, targetLanguage);
                 logger.info("[Translation Pipeline] English translation for chunk {}: {}", i, translatedText);
+                
+                // Collect scripts for document generation
+                sourceScripts.add(transcribedText);
+                targetScripts.add(translatedText);
+                logger.info("[Translation Pipeline] Collected scripts for chunk {} - Source: {} chars, Target: {} chars", 
+                           i, transcribedText.length(), translatedText.length());
                 
                 // Synthesize speech from translated text with gender detection
                 File translatedAudioChunk = tempDir.resolve(
@@ -391,6 +402,48 @@ public class JobManager {
                 logger.info("[Translation Pipeline] Translated video uploaded to local storage: {}", translatedVideoKey);
             }
             
+            // Step 7: Generate script document with source and target language scripts
+            logger.info("Job {}: Generating script document for {} to {} translation", job.getId(), job.getSourceLanguage(), targetLanguage);
+            try {
+                // Generate both side-by-side and simple script documents
+                File sideBySideScript = scriptGenerationService.generateScriptDocument(
+                    sourceScripts, targetScripts, job.getSourceLanguage(), targetLanguage, tempDir);
+                
+                File simpleScript = scriptGenerationService.generateSimpleScript(
+                    sourceScripts, targetScripts, job.getSourceLanguage(), targetLanguage, tempDir);
+                
+                // Upload script documents to S3
+                String sideBySideScriptKey = job.getId() + "_" + targetLanguage + "_script_side_by_side.txt";
+                String simpleScriptKey = job.getId() + "_" + targetLanguage + "_script_simple.txt";
+                
+                try {
+                    s3StorageService.uploadFileWithKey(sideBySideScript, sideBySideScriptKey);
+                    s3StorageService.uploadFileWithKey(simpleScript, simpleScriptKey);
+                    logger.info("[Translation Pipeline] SUCCESS: Script documents uploaded to S3:");
+                    logger.info("[Translation Pipeline] - Side-by-side script: {}", sideBySideScriptKey);
+                    logger.info("[Translation Pipeline] - Simple script: {}", simpleScriptKey);
+                    
+                    // Log the S3 URLs for easy access
+                    String sideBySideUrl = s3StorageService.getFileUrl(sideBySideScriptKey);
+                    String simpleUrl = s3StorageService.getFileUrl(simpleScriptKey);
+                    logger.info("[Translation Pipeline] Script document URLs:");
+                    logger.info("[Translation Pipeline] - Side-by-side: {}", sideBySideUrl);
+                    logger.info("[Translation Pipeline] - Simple: {}", simpleUrl);
+                    
+                } catch (Exception s3Error) {
+                    logger.warn("[Translation Pipeline] S3 upload failed for script documents, using local storage: {}", s3Error.getMessage());
+                    localStorageService.uploadFileWithKey(sideBySideScript, sideBySideScriptKey);
+                    localStorageService.uploadFileWithKey(simpleScript, simpleScriptKey);
+                    logger.info("[Translation Pipeline] Script documents saved to local storage");
+                }
+                
+                logger.info("[Translation Pipeline] Script document generation completed successfully");
+                
+            } catch (Exception scriptError) {
+                logger.warn("[Translation Pipeline] Script document generation failed: {}", scriptError.getMessage());
+                // Don't fail the entire job if script generation fails
+            }
+            
             // Update result
             result.setS3VideoKey(translatedVideoKey);
             result.setFileSizeBytes(translatedVideoFile.length());
@@ -412,7 +465,8 @@ public class JobManager {
             
         } catch (Exception e) {
             logger.error("Failed to process language {} for job {}: {}", targetLanguage, job.getId(), e.getMessage());
-            result.markAsFailed(e.getMessage());
+            String errorMessage = truncateErrorMessage(e.getMessage());
+            result.markAsFailed(errorMessage);
             job.getTranslationResults().add(result);
             jobRepository.save(job);
             throw e;
@@ -519,7 +573,8 @@ public class JobManager {
             
         } catch (Exception e) {
             logger.error("Failed to process language {} for job {}: {}", targetLanguage, job.getId(), e.getMessage());
-            result.markAsFailed(e.getMessage());
+            String errorMessage = truncateErrorMessage(e.getMessage());
+            result.markAsFailed(errorMessage);
             throw e;
         }
     }
@@ -575,12 +630,51 @@ public class JobManager {
      * @param exception The exception that caused the failure
      */
     private void handleJobFailure(TranslationJob job, Exception exception) {
-        job.markAsFailed(exception.getMessage());
+        String errorMessage = exception.getMessage();
+        if (errorMessage == null || errorMessage.trim().isEmpty()) {
+            errorMessage = "Unknown error occurred during translation processing";
+        }
+        
+        // Truncate error message to prevent database constraint violations
+        errorMessage = truncateErrorMessage(errorMessage);
+        
+        job.markAsFailed(errorMessage);
         jobRepository.save(job);
-        notificationService.sendJobFailureNotification(job);
+        
+        // Send failure notification
+        try {
+            notificationService.sendJobFailureNotification(job);
+        } catch (Exception e) {
+            logger.warn("Failed to send job failure notification: {}", e.getMessage());
+        }
         
         // Log detailed error information
         logger.error("Job failure details for job {}: {}", job.getId(), exception.getMessage(), exception);
+    }
+    
+    /**
+     * Truncate error message to fit database column constraints.
+     * 
+     * @param errorMessage The original error message
+     * @return Truncated error message
+     */
+    private String truncateErrorMessage(String errorMessage) {
+        if (errorMessage == null) {
+            return "Unknown error occurred";
+        }
+        
+        // Database column is VARCHAR(2000), leave some buffer
+        int maxLength = 1900;
+        
+        if (errorMessage.length() <= maxLength) {
+            return errorMessage;
+        }
+        
+        // Truncate and add indicator
+        String truncated = errorMessage.substring(0, maxLength - 3) + "...";
+        logger.warn("Error message truncated from {} to {} characters", errorMessage.length(), truncated.length());
+        
+        return truncated;
     }
     
     /**

@@ -4,685 +4,180 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Video Translation Service</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        .hero-section {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
-
-        .container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-            padding: 40px;
-            max-width: 600px;
-            width: 100%;
-        }
-
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-
-        .header h1 {
-            color: #333;
-            font-size: 2.5em;
-            margin-bottom: 10px;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .header p {
-            color: #666;
-            font-size: 1.1em;
-        }
-
-        .upload-form {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-
-        .form-group {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .form-group label {
-            font-weight: 600;
-            color: #333;
-            font-size: 1.1em;
-        }
-
-        .form-group input, .form-group select, .form-group textarea {
-            padding: 12px 16px;
-            border: 2px solid #e1e5e9;
-            border-radius: 10px;
-            font-size: 1em;
-            transition: all 0.3s ease;
-        }
-
-        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
-        .file-upload {
-            position: relative;
-            display: inline-block;
-            cursor: pointer;
-        }
-
-        .file-upload input[type=file] {
-            position: absolute;
-            opacity: 0;
-            width: 100%;
-            height: 100%;
-            cursor: pointer;
-        }
-
-        .file-upload-label {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-            border: 2px dashed #667eea;
-            border-radius: 10px;
-            background: #f8f9ff;
-            color: #667eea;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            min-height: 120px;
-        }
-
-        .file-upload:hover .file-upload-label {
-            background: #667eea;
             color: white;
-            border-color: #667eea;
+            padding: 80px 0;
         }
-
-        .file-info {
-            margin-top: 10px;
-            padding: 10px;
-            background: #f8f9ff;
-            border-radius: 8px;
-            display: none;
-        }
-
-        .languages-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            gap: 12px;
-            margin-top: 10px;
-        }
-
-        .language-section {
-            grid-column: 1 / -1;
-            margin-top: 15px;
-            margin-bottom: 10px;
-        }
-
-        .language-section-title {
-            font-weight: 600;
-            color: #333;
-            font-size: 0.9em;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 8px;
-            padding-bottom: 4px;
-            border-bottom: 2px solid #667eea;
-        }
-
-        .language-checkbox {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 10px 12px;
-            background: #f8f9ff;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            border: 1px solid #e1e5e9;
-        }
-
-        .language-checkbox:hover {
-            background: #e8f0ff;
-            border-color: #667eea;
-            transform: translateY(-1px);
-            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
-        }
-
-        .language-checkbox input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
-            accent-color: #667eea;
-        }
-
-        .language-checkbox span {
-            font-weight: 500;
-            color: #333;
-        }
-
-        .submit-btn {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
+        .feature-card {
             border: none;
-            padding: 15px 30px;
-            border-radius: 10px;
-            font-size: 1.1em;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin-top: 20px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
         }
-
-        .submit-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        .feature-card:hover {
+            transform: translateY(-5px);
         }
-
-        .submit-btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
+        .btn-get-started {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            border: none;
+            padding: 15px 40px;
+            font-size: 18px;
+            border-radius: 50px;
         }
-
-        .progress-bar {
-            width: 100%;
-            height: 8px;
-            background: #e1e5e9;
-            border-radius: 4px;
-            overflow: hidden;
-            margin-top: 10px;
-            display: none;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            width: 0%;
-            transition: width 0.3s ease;
-        }
-
-        .status-message {
-            margin-top: 15px;
-            padding: 12px;
-            border-radius: 8px;
-            display: none;
-        }
-
-        .status-success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-
-        .status-error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-
-        .status-info {
-            background: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
-        }
-
-        .job-status {
-            margin-top: 20px;
-            padding: 15px;
-            background: #f8f9ff;
-            border-radius: 10px;
-            display: none;
-        }
-
-        .job-status h3 {
-            color: #333;
-            margin-bottom: 10px;
-        }
-
-        .job-details {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            font-size: 0.9em;
-        }
-
-        .job-detail {
-            display: flex;
-            justify-content: space-between;
-        }
-
-        .job-detail span:first-child {
-            font-weight: 600;
-            color: #666;
-        }
-
-        .job-detail span:last-child {
-            color: #333;
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                padding: 20px;
-                margin: 10px;
-            }
-
-            .header h1 {
-                font-size: 2em;
-            }
-
-            .languages-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
+        .btn-get-started:hover {
+            transform: scale(1.05);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.2);
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>Video Translation Service</h1>
-            <p>Upload your video and translate it to multiple languages</p>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-language me-2"></i>
+                Video Translation Service
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/dashboard.html">
+                    <i class="fas fa-tachometer-alt me-1"></i>Dashboard
+                </a>
+            </div>
         </div>
+    </nav>
 
-        <form class="upload-form" id="uploadForm">
-            <div class="form-group">
-                <label for="userEmail">Email Address *</label>
-                <input type="email" id="userEmail" name="userEmail" required placeholder="Enter your email address">
-            </div>
-
-            <div class="form-group">
-                <label for="videoFile">Video File *</label>
-                <div class="file-upload">
-                    <input type="file" id="videoFile" name="file" accept="video/*" required>
-                    <div class="file-upload-label" id="fileLabel">
-                        <span>📁 Click to select video file or drag and drop</span>
-                    </div>
-                </div>
-                <div class="file-info" id="fileInfo"></div>
-            </div>
-
-            <div class="form-group">
-                <label for="sourceLanguage">Source Language</label>
-                <select id="sourceLanguage" name="sourceLanguage">
-                    <option value="auto">Auto Detect</option>
-                    <option value="english">English</option>
-                    
-                    <!-- Indian Languages -->
-                    <option value="hindi">Hindi</option>
-                    <option value="tamil">Tamil</option>
-                    <option value="telugu">Telugu</option>
-                    <option value="kannada">Kannada</option>
-                    <option value="malayalam">Malayalam</option>
-                    <option value="bengali">Bengali</option>
-                    <option value="marathi">Marathi</option>
-                    <option value="gujarati">Gujarati</option>
-                    <option value="punjabi">Punjabi</option>
-                    <option value="urdu">Urdu</option>
-                    
-                    <!-- Other Languages -->
-                    <option value="arabic">Arabic</option>
-                    <option value="korean">Korean</option>
-                    <option value="chinese">Chinese</option>
-                    <option value="spanish">Spanish</option>
-                    <option value="french">French</option>
-                    <option value="german">German</option>
-                    <option value="japanese">Japanese</option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label>Target Languages *</label>
-                <div class="languages-grid" id="languagesGrid">
-                    <!-- English -->
-                    <div class="language-section">
-                        <div class="language-section-title">English</div>
-                    </div>
-                    <label class="language-checkbox">
-                        <input type="checkbox" name="targetLanguages" value="english" checked>
-                        <span>English</span>
-                    </label>
-                    
-                    <!-- Indian Languages -->
-                    <div class="language-section">
-                        <div class="language-section-title">Indian Languages</div>
-                    </div>
-                    <label class="language-checkbox">
-                        <input type="checkbox" name="targetLanguages" value="hindi">
-                        <span>Hindi</span>
-                    </label>
-                    <label class="language-checkbox">
-                        <input type="checkbox" name="targetLanguages" value="tamil">
-                        <span>Tamil</span>
-                    </label>
-                    <label class="language-checkbox">
-                        <input type="checkbox" name="targetLanguages" value="telugu">
-                        <span>Telugu</span>
-                    </label>
-                    <label class="language-checkbox">
-                        <input type="checkbox" name="targetLanguages" value="kannada">
-                        <span>Kannada</span>
-                    </label>
-                    <label class="language-checkbox">
-                        <input type="checkbox" name="targetLanguages" value="malayalam">
-                        <span>Malayalam</span>
-                    </label>
-                    <label class="language-checkbox">
-                        <input type="checkbox" name="targetLanguages" value="bengali">
-                        <span>Bengali</span>
-                    </label>
-                    <label class="language-checkbox">
-                        <input type="checkbox" name="targetLanguages" value="marathi">
-                        <span>Marathi</span>
-                    </label>
-                    <label class="language-checkbox">
-                        <input type="checkbox" name="targetLanguages" value="gujarati">
-                        <span>Gujarati</span>
-                    </label>
-                    <label class="language-checkbox">
-                        <input type="checkbox" name="targetLanguages" value="punjabi">
-                        <span>Punjabi</span>
-                    </label>
-                    <label class="language-checkbox">
-                        <input type="checkbox" name="targetLanguages" value="urdu">
-                        <span>Urdu</span>
-                    </label>
-                    
-                    <!-- Other Languages -->
-                    <div class="language-section">
-                        <div class="language-section-title">Other Languages</div>
-                    </div>
-                    <label class="language-checkbox">
-                        <input type="checkbox" name="targetLanguages" value="arabic">
-                        <span>Arabic</span>
-                    </label>
-                    <label class="language-checkbox">
-                        <input type="checkbox" name="targetLanguages" value="korean">
-                        <span>Korean</span>
-                    </label>
-                    <label class="language-checkbox">
-                        <input type="checkbox" name="targetLanguages" value="chinese">
-                        <span>Chinese</span>
-                    </label>
-                    <label class="language-checkbox">
-                        <input type="checkbox" name="targetLanguages" value="spanish">
-                        <span>Spanish</span>
-                    </label>
-                    <label class="language-checkbox">
-                        <input type="checkbox" name="targetLanguages" value="french">
-                        <span>French</span>
-                    </label>
-                    <label class="language-checkbox">
-                        <input type="checkbox" name="targetLanguages" value="german">
-                        <span>German</span>
-                    </label>
-                    <label class="language-checkbox">
-                        <input type="checkbox" name="targetLanguages" value="japanese">
-                        <span>Japanese</span>
-                    </label>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label for="description">Description (Optional)</label>
-                <textarea id="description" name="description" rows="3" placeholder="Add any additional notes about your video..."></textarea>
-            </div>
-
-            <button type="submit" class="submit-btn" id="submitBtn">
-                <span id="submitText">🚀 Start Translation</span>
-            </button>
-
-            <div class="progress-bar" id="progressBar">
-                <div class="progress-fill" id="progressFill"></div>
-            </div>
-
-            <div class="status-message" id="statusMessage"></div>
-
-            <div class="job-status" id="jobStatus">
-                <h3>Translation Job Status</h3>
-                <div class="job-details" id="jobDetails"></div>
-            </div>
-        </form>
+    <div class="hero-section">
+        <div class="container text-center">
+            <h1 class="display-4 mb-4">
+                <i class="fas fa-language me-3"></i>
+                Professional Video Translation Service
+            </h1>
+            <p class="lead mb-5">
+                Transform your videos into multiple languages with AI-powered translation, 
+                natural voice synthesis, and perfect lip-sync matching.
+            </p>
+            <a href="/dashboard.html" class="btn btn-light btn-get-started">
+                <i class="fas fa-rocket me-2"></i>Get Started
+            </a>
+        </div>
     </div>
 
-    <script>
-        const API_BASE = '/api/v1/translation';
-        let currentJobId = null;
-        let statusCheckInterval = null;
-
-        // File upload handling
-        const fileInput = document.getElementById('videoFile');
-        const fileLabel = document.getElementById('fileLabel');
-        const fileInfo = document.getElementById('fileInfo');
-
-        fileInput.addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (file) {
-                fileLabel.innerHTML = `📹 ${file.name}`;
-                fileInfo.style.display = 'block';
-                fileInfo.innerHTML = `
-                    <strong>File:</strong> ${file.name}<br>
-                    <strong>Size:</strong> ${formatFileSize(file.size)}<br>
-                    <strong>Type:</strong> ${file.type}
-                `;
-            } else {
-                fileLabel.innerHTML = '📁 Click to select video file or drag and drop';
-                fileInfo.style.display = 'none';
-            }
-        });
-
-        // Drag and drop functionality
-        const fileUpload = document.querySelector('.file-upload');
-        
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            fileUpload.addEventListener(eventName, preventDefaults, false);
-        });
-
-        function preventDefaults(e) {
-            e.preventDefault();
-            e.stopPropagation();
-        }
-
-        ['dragenter', 'dragover'].forEach(eventName => {
-            fileUpload.addEventListener(eventName, highlight, false);
-        });
-
-        ['dragleave', 'drop'].forEach(eventName => {
-            fileUpload.addEventListener(eventName, unhighlight, false);
-        });
-
-        function highlight(e) {
-            fileUpload.querySelector('.file-upload-label').style.background = '#667eea';
-            fileUpload.querySelector('.file-upload-label').style.color = 'white';
-        }
-
-        function unhighlight(e) {
-            fileUpload.querySelector('.file-upload-label').style.background = '#f8f9ff';
-            fileUpload.querySelector('.file-upload-label').style.color = '#667eea';
-        }
-
-        fileUpload.addEventListener('drop', handleDrop, false);
-
-        function handleDrop(e) {
-            const dt = e.dataTransfer;
-            const files = dt.files;
-            fileInput.files = files;
-            fileInput.dispatchEvent(new Event('change'));
-        }
-
-        // Form submission
-        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const submitBtn = document.getElementById('submitBtn');
-            const submitText = document.getElementById('submitText');
-            const progressBar = document.getElementById('progressBar');
-            const progressFill = document.getElementById('progressFill');
-            const statusMessage = document.getElementById('statusMessage');
-
-            // Validate form
-            const userEmail = document.getElementById('userEmail').value;
-            const file = fileInput.files[0];
-            const targetLanguages = Array.from(document.querySelectorAll('input[name="targetLanguages"]:checked'))
-                .map(cb => cb.value);
-
-            if (!userEmail || !file || targetLanguages.length === 0) {
-                showStatus('Please fill in all required fields and select at least one target language.', 'error');
-                return;
-            }
-
-            // Prepare form data
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('userEmail', userEmail);
-            formData.append('sourceLanguage', document.getElementById('sourceLanguage').value);
-            formData.append('targetLanguages', targetLanguages.join(','));
-            
-            const description = document.getElementById('description').value;
-            if (description) {
-                formData.append('description', description);
-            }
-
-            // Update UI
-            submitBtn.disabled = true;
-            submitText.textContent = '📤 Uploading...';
-            progressBar.style.display = 'block';
-            progressFill.style.width = '0%';
-            showStatus('Uploading video file...', 'info');
-
-            try {
-                // Upload file
-                const response = await fetch(`${API_BASE}/upload`, {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-
-                const result = await response.json();
-                
-                if (result.jobId) {
-                    currentJobId = result.jobId;
-                    showStatus('Video uploaded successfully! Translation job started.', 'success');
-                    submitText.textContent = '✅ Upload Complete';
-                    progressFill.style.width = '100%';
-                    
-                    // Show job status
-                    showJobStatus(result);
-                    
-                    // Start monitoring job progress
-                    startJobMonitoring(result.jobId);
-                } else {
-                    throw new Error('No job ID received from server');
-                }
-
-            } catch (error) {
-                console.error('Upload error:', error);
-                showStatus(`Upload failed: ${error.message}`, 'error');
-                submitBtn.disabled = false;
-                submitText.textContent = '🚀 Start Translation';
-                progressBar.style.display = 'none';
-            }
-        });
-
-        function showStatus(message, type) {
-            const statusMessage = document.getElementById('statusMessage');
-            statusMessage.textContent = message;
-            statusMessage.className = `status-message status-${type}`;
-            statusMessage.style.display = 'block';
-        }
-
-        function showJobStatus(job) {
-            const jobStatus = document.getElementById('jobStatus');
-            const jobDetails = document.getElementById('jobDetails');
-            
-            jobDetails.innerHTML = `
-                <div class="job-detail">
-                    <span>Job ID:</span>
-                    <span>${job.jobId}</span>
+    <div class="container my-5">
+        <div class="row">
+            <div class="col-md-4 mb-4">
+                <div class="card feature-card h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-cloud-upload-alt fa-3x text-primary mb-3"></i>
+                        <h5 class="card-title">Easy File Management</h5>
+                        <p class="card-text">
+                            Upload your videos once and manage them efficiently. 
+                            No need to re-upload for different translations.
+                        </p>
+                    </div>
                 </div>
-                <div class="job-detail">
-                    <span>Status:</span>
-                    <span>${job.status}</span>
+            </div>
+            <div class="col-md-4 mb-4">
+                <div class="card feature-card h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-language fa-3x text-success mb-3"></i>
+                        <h5 class="card-title">Multi-Language Support</h5>
+                        <p class="card-text">
+                            Support for 12+ Indian languages including Hindi, Tamil, 
+                            Telugu, Kannada, and more with natural voice synthesis.
+                        </p>
+                    </div>
                 </div>
-                <div class="job-detail">
-                    <span>Progress:</span>
-                    <span>${job.progressPercentage || 0}%</span>
+            </div>
+            <div class="col-md-4 mb-4">
+                <div class="card feature-card h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-magic fa-3x text-warning mb-3"></i>
+                        <h5 class="card-title">AI-Powered Quality</h5>
+                        <p class="card-text">
+                            Advanced AI transcription, translation, and voice synthesis 
+                            with proper noun preservation and lip-sync enhancement.
+                        </p>
+                    </div>
                 </div>
-                <div class="job-detail">
-                    <span>Created:</span>
-                    <span>${new Date(job.createdAt).toLocaleString()}</span>
+            </div>
+        </div>
+
+        <div class="row mt-5">
+            <div class="col-md-6">
+                <h3>How It Works</h3>
+                <div class="d-flex align-items-center mb-3">
+                    <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px;">
+                        <strong>1</strong>
+                    </div>
+                    <div>
+                        <h6>Upload Your Video</h6>
+                        <p class="text-muted">Upload your video file once to our secure cloud storage</p>
+                    </div>
                 </div>
-            `;
-            
-            jobStatus.style.display = 'block';
-        }
+                <div class="d-flex align-items-center mb-3">
+                    <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px;">
+                        <strong>2</strong>
+                    </div>
+                    <div>
+                        <h6>Select Languages</h6>
+                        <p class="text-muted">Choose from multiple target languages for translation</p>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center mb-3">
+                    <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px;">
+                        <strong>3</strong>
+                    </div>
+                    <div>
+                        <h6>Get Translated Videos</h6>
+                        <p class="text-muted">Download your professionally translated videos with perfect audio</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <h3>Supported Languages</h3>
+                <div class="row">
+                    <div class="col-6">
+                        <ul class="list-unstyled">
+                            <li><i class="fas fa-check text-success me-2"></i>English</li>
+                            <li><i class="fas fa-check text-success me-2"></i>Hindi</li>
+                            <li><i class="fas fa-check text-success me-2"></i>Tamil</li>
+                            <li><i class="fas fa-check text-success me-2"></i>Telugu</li>
+                            <li><i class="fas fa-check text-success me-2"></i>Kannada</li>
+                            <li><i class="fas fa-check text-success me-2"></i>Malayalam</li>
+                        </ul>
+                    </div>
+                    <div class="col-6">
+                        <ul class="list-unstyled">
+                            <li><i class="fas fa-check text-success me-2"></i>Bengali</li>
+                            <li><i class="fas fa-check text-success me-2"></i>Marathi</li>
+                            <li><i class="fas fa-check text-success me-2"></i>Gujarati</li>
+                            <li><i class="fas fa-check text-success me-2"></i>Punjabi</li>
+                            <li><i class="fas fa-check text-success me-2"></i>Urdu</li>
+                            <li><i class="fas fa-check text-success me-2"></i>Arabic</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-        function startJobMonitoring(jobId) {
-            if (statusCheckInterval) {
-                clearInterval(statusCheckInterval);
-            }
+        <div class="text-center mt-5">
+            <h3>Ready to Get Started?</h3>
+            <p class="lead">Join thousands of users who trust our video translation service</p>
+            <a href="/dashboard.html" class="btn btn-primary btn-lg">
+                <i class="fas fa-play me-2"></i>Start Translating Now
+            </a>
+        </div>
+    </div>
 
-            statusCheckInterval = setInterval(async () => {
-                try {
-                    const response = await fetch(`${API_BASE}/job/${jobId}`);
-                    if (response.ok) {
-                        const job = await response.json();
-                        showJobStatus(job);
-                        
-                        if (job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED') {
-                            clearInterval(statusCheckInterval);
-                            if (job.status === 'COMPLETED') {
-                                showStatus('Translation completed successfully! You can now download the translated videos.', 'success');
-                            } else if (job.status === 'FAILED') {
-                                showStatus(`Translation failed: ${job.errorMessage || 'Unknown error'}`, 'error');
-                            }
-                        }
-                    }
-                } catch (error) {
-                    console.error('Status check error:', error);
-                }
-            }, 5000); // Check every 5 seconds
-        }
+    <footer class="bg-dark text-light py-4 mt-5">
+        <div class="container text-center">
+            <p>&copy; 2024 Video Translation Service. All rights reserved.</p>
+        </div>
+    </footer>
 
-        function formatFileSize(bytes) {
-            if (bytes === 0) return '0 Bytes';
-            const k = 1024;
-            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-        }
-
-        // Load supported languages on page load
-        window.addEventListener('load', async () => {
-            try {
-                const response = await fetch(`${API_BASE}/languages`);
-                if (response.ok) {
-                    const languages = await response.json();
-                    console.log('Supported languages:', languages);
-                }
-            } catch (error) {
-                console.error('Failed to load supported languages:', error);
-            }
-        });
-    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html> 

@@ -43,7 +43,7 @@ public class TranslationResult {
     @Column(name = "file_size_bytes")
     private Long fileSizeBytes;
     
-    @Column(name = "error_message")
+    @Column(name = "error_message", length = 2000)
     private String errorMessage;
     
     @NotNull

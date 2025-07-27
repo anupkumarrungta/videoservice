@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.translate.TranslateClient;
 import software.amazon.awssdk.services.translate.model.*;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -49,11 +50,13 @@ public class TranslationService {
         LANGUAGE_CODES.put("french", "fr");
         LANGUAGE_CODES.put("german", "de");
         LANGUAGE_CODES.put("japanese", "ja");
-        LANGUAGE_CODES.put("auto", "auto");
     }
     
-    @Value("${translation.aws.source-language:auto}")
+    @Value("${translation.aws.source-language:english}")
     private String defaultSourceLanguage;
+    
+    // Map to store proper noun replacements during translation
+    private Map<String, String> properNounMap = new HashMap<>();
     
     public TranslationService(TranslateClient translateClient) {
         this.translateClient = translateClient;
@@ -93,14 +96,21 @@ public class TranslationService {
                 return translateLongText(text, sourceLanguage, targetLanguage);
             }
             
+            // Reset proper noun map for this translation
+            properNounMap.clear();
+            
+            // Extract and preserve proper nouns (names, places, etc.)
+            String processedText = preserveProperNouns(text);
+            logger.info("[Translation Service] Processed text with preserved proper nouns: {}", processedText);
+            
             // Check if the language pair is directly supported
             if (!isLanguagePairSupported(sourceLanguage, targetLanguage)) {
                 logger.info("[Translation Service] Language pair not directly supported, using English as intermediate");
-                return translateViaEnglish(text, sourceLanguage, targetLanguage);
+                return translateViaEnglish(processedText, sourceLanguage, targetLanguage);
             }
             
             TranslateTextRequest request = TranslateTextRequest.builder()
-                    .text(text)
+                    .text(processedText)
                     .sourceLanguageCode(sourceCode)
                     .targetLanguageCode(targetCode)
                     .build();
@@ -109,11 +119,15 @@ public class TranslationService {
             TranslateTextResponse response = translateClient.translateText(request);
             
             String translatedText = response.translatedText();
+            
+            // Restore proper nouns in the translated text
+            String finalText = restoreProperNouns(translatedText, text);
+            
             logger.info("[Translation Service] Translation completed successfully!");
             logger.info("[Translation Service] Original text ({} chars): {}", text.length(), text);
-            logger.info("[Translation Service] Translated text ({} chars): {}", translatedText.length(), translatedText);
+            logger.info("[Translation Service] Translated text ({} chars): {}", finalText.length(), finalText);
             
-            return translatedText;
+            return finalText;
             
         } catch (TranslateException e) {
             logger.error("Translation failed: {}", e.getMessage());
@@ -139,6 +153,9 @@ public class TranslationService {
      */
     private String translateLongText(String text, String sourceLanguage, String targetLanguage) throws TranslationException {
         logger.info("Translating long text in chunks: {} chars", text.length());
+        
+        // Reset proper noun map for this translation
+        properNounMap.clear();
         
         // Split text into sentences or chunks
         String[] sentences = text.split("[।.!?]");
@@ -189,14 +206,22 @@ public class TranslationService {
             String sourceCode = getLanguageCode(sourceLanguage);
             String targetCode = getLanguageCode(targetLanguage);
             
+            // Preserve proper nouns in this chunk
+            String processedText = preserveProperNouns(text);
+            
             TranslateTextRequest request = TranslateTextRequest.builder()
-                    .text(text)
+                    .text(processedText)
                     .sourceLanguageCode(sourceCode)
                     .targetLanguageCode(targetCode)
                     .build();
             
             TranslateTextResponse response = translateClient.translateText(request);
-            return response.translatedText();
+            String translatedText = response.translatedText();
+            
+            // Restore proper nouns in the translated text
+            String finalText = restoreProperNouns(translatedText, text);
+            
+            return finalText;
             
         } catch (TranslateException e) {
             logger.error("Translation chunk failed: {}", e.getMessage());
@@ -446,6 +471,160 @@ public class TranslationService {
     }
     
     /**
+     * Preserve proper nouns (names, places, etc.) during translation by replacing them with unique identifiers.
+     * This helps prevent translation services from translating proper nouns.
+     */
+    private String preserveProperNouns(String text) {
+        if (text == null || text.trim().isEmpty()) {
+            return text;
+        }
+        
+        try {
+            // Split text into words
+            String[] words = text.split("\\s+");
+            StringBuilder processedText = new StringBuilder();
+            Map<String, String> properNounMap = new HashMap<>();
+            int properNounCounter = 0;
+            
+            for (int i = 0; i < words.length; i++) {
+                String word = words[i];
+                
+                // Check if word looks like a proper noun (name, place, etc.)
+                if (isProperNoun(word)) {
+                    // Create a unique identifier for this proper noun
+                    String identifier = "PN_" + properNounCounter + "_" + word.length();
+                    properNounMap.put(identifier, word);
+                    processedText.append(identifier);
+                    logger.debug("[Translation Service] Preserved proper noun: {} -> {}", word, identifier);
+                    properNounCounter++;
+                } else {
+                    processedText.append(word);
+                }
+                
+                // Add space between words (except for the last word)
+                if (i < words.length - 1) {
+                    processedText.append(" ");
+                }
+            }
+            
+            // Store the mapping for restoration
+            this.properNounMap = properNounMap;
+            
+            return processedText.toString();
+            
+        } catch (Exception e) {
+            logger.warn("[Translation Service] Error preserving proper nouns: {}", e.getMessage());
+            return text; // Return original text if processing fails
+        }
+    }
+    
+    /**
+     * Restore proper nouns after translation by replacing identifiers with original words.
+     */
+    private String restoreProperNouns(String translatedText, String originalText) {
+        if (translatedText == null || originalText == null) {
+            return translatedText;
+        }
+        
+        try {
+            String restoredText = translatedText;
+            
+            // Restore proper nouns using the stored mapping
+            for (Map.Entry<String, String> entry : properNounMap.entrySet()) {
+                String identifier = entry.getKey();
+                String properNoun = entry.getValue();
+                
+                // Replace the identifier with the original proper noun
+                restoredText = restoredText.replace(identifier, properNoun);
+                logger.debug("[Translation Service] Restored proper noun: {} -> {}", identifier, properNoun);
+            }
+            
+            // Clear the mapping for next use
+            properNounMap.clear();
+            
+            return restoredText;
+            
+        } catch (Exception e) {
+            logger.warn("[Translation Service] Error restoring proper nouns: {}", e.getMessage());
+            return translatedText; // Return translated text if restoration fails
+        }
+    }
+    
+    /**
+     * Check if a word is likely a proper noun (name, place, etc.).
+     */
+    private boolean isProperNoun(String word) {
+        if (word == null || word.trim().isEmpty()) {
+            return false;
+        }
+        
+        String cleanWord = word.trim();
+        
+        // Skip common English words that shouldn't be preserved
+        String[] commonWords = {
+            "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by", "from", "up", "down", "out", "off", "over", "under",
+            "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did", "will", "would", "could", "should", "may", "might", "can",
+            "this", "that", "these", "those", "i", "you", "he", "she", "it", "we", "they", "me", "him", "her", "us", "them", "my", "your", "his", "her", "its", "our", "their",
+            "very", "good", "morning", "everyone", "welcome", "back", "center", "stage", "host", "session", "high", "performance", "grace", "skill", "artistry", "display", "performers", "journey", "moment", "entertainment", "pause", "festivities", "continues"
+        };
+        
+        String lowerWord = cleanWord.toLowerCase();
+        for (String commonWord : commonWords) {
+            if (lowerWord.equals(commonWord)) {
+                return false;
+            }
+        }
+        
+        // Check for common proper noun patterns
+        return (
+            // Capitalized words that are likely names (not sentence starters)
+            (cleanWord.length() > 1 && Character.isUpperCase(cleanWord.charAt(0)) && 
+             !isCommonSentenceStarter(cleanWord)) ||
+            
+            // Acronyms (all caps, 2+ characters)
+            cleanWord.matches("\\b[A-Z]{2,}\\b") ||
+            
+            // Words with mixed case (like "McDonald", "iPhone")
+            cleanWord.matches("\\b[A-Z][a-z]*[A-Z][a-z]*\\b") ||
+            
+            // Specific name patterns (first letter capitalized, reasonable length)
+            (cleanWord.length() >= 3 && cleanWord.length() <= 15 && 
+             Character.isUpperCase(cleanWord.charAt(0)) && 
+             cleanWord.matches("[A-Z][a-z]+") &&
+             !isCommonWord(cleanWord))
+        );
+    }
+    
+    /**
+     * Check if a word is a common sentence starter that shouldn't be preserved.
+     */
+    private boolean isCommonSentenceStarter(String word) {
+        String[] starters = {"The", "A", "An", "This", "That", "These", "Those", "I", "You", "He", "She", "It", "We", "They"};
+        for (String starter : starters) {
+            if (word.equals(starter)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    /**
+     * Check if a word is a common English word that shouldn't be preserved.
+     */
+    private boolean isCommonWord(String word) {
+        String[] commonWords = {
+            "Very", "Good", "Morning", "Everyone", "Welcome", "Back", "Center", "Stage", "Host", "Session", "High", "Performance", "Grace", "Skill", "Artistry", "Display", "Performers", "Journey", "Moment", "Entertainment", "Pause", "Festivities", "Continues",
+            "Between", "Captivating", "Refined", "Keeping", "Enthralled", "Transit", "While", "Take", "Offer", "As", "By", "On", "In", "At", "To", "For", "Of", "With", "From", "Up", "Down", "Out", "Off", "Over", "Under"
+        };
+        for (String commonWord : commonWords) {
+            if (word.equals(commonWord)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    /**
      * Custom exception for translation errors.
      */
     public static class TranslationException extends Exception {
@@ -498,8 +677,11 @@ public class TranslationService {
                     .build();
             
             TranslateTextResponse response2 = translateClient.translateText(request2);
-            String finalText = response2.translatedText();
+            String translatedText = response2.translatedText();
             logger.info("[Translation Service] Step 2 completed: English -> {}", targetLanguage);
+            
+            // Restore proper nouns in the final translated text
+            String finalText = restoreProperNouns(translatedText, text);
             
             logger.info("[Translation Service] Fallback translation completed successfully!");
             logger.info("[Translation Service] Original: {} chars, English: {} chars, Final: {} chars", 

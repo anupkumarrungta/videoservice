@@ -1,3 +1,4 @@
+
 package com.videoservice.dto;
 
 import com.videoservice.model.JobStatus;
@@ -24,6 +25,7 @@ public class TranslationResponse {
     private LocalDateTime updatedAt;
     private LocalDateTime completedAt;
     private List<TranslationResultResponse> results;
+    private String message;
     
     // Constructors
     public TranslationResponse() {}
@@ -32,6 +34,10 @@ public class TranslationResponse {
         this.jobId = jobId;
         this.originalFilename = originalFilename;
         this.status = status;
+    }
+    
+    public TranslationResponse(String message) {
+        this.message = message;
     }
     
     // Getters and Setters
@@ -145,6 +151,14 @@ public class TranslationResponse {
     
     public void setResults(List<TranslationResultResponse> results) {
         this.results = results;
+    }
+    
+    public String getMessage() {
+        return message;
+    }
+    
+    public void setMessage(String message) {
+        this.message = message;
     }
     
     @Override

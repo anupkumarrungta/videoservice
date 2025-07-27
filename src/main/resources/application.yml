@@ -2,7 +2,7 @@
 server:
   port: 8080
   servlet:
-    context-path: /api/v1
+    context-path: /
 
 spring:
   application:
@@ -76,7 +76,7 @@ aws:
 translation:
   # AWS Translate Configuration
   aws:
-    source-language: ${SOURCE_LANGUAGE:auto}
+    source-language: ${SOURCE_LANGUAGE:english}
     target-languages:
       - english
       - arabic

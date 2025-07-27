@@ -33,7 +33,7 @@ aws:
 # Translation Service Configuration
 translation:
   aws:
-    source-language: auto
+    source-language: english
     target-languages:
       - english
       - arabic

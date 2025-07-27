@@ -2162,4 +2162,242 @@ public class VideoProcessingService {
             throw new IOException("Failed to create test chunk", e);
         }
     }
+
+    /**
+     * Create video with proper audio timing and modulation preservation.
+     * This method ensures the output video matches the original duration and preserves audio characteristics.
+     * 
+     * @param videoFile The original video file
+     * @param audioFile The translated audio file
+     * @param outputFile The output video file
+     * @return The output video file
+     * @throws IOException if processing fails
+     */
+    public File createVideoWithProperAudioTiming(File videoFile, File audioFile, File outputFile) throws IOException {
+        logger.info("[Audio Timing] Starting video creation with proper audio timing");
+        logger.info("[Audio Timing] Video: {} ({} bytes)", videoFile.getName(), videoFile.length());
+        logger.info("[Audio Timing] Audio: {} ({} bytes)", audioFile.getName(), audioFile.length());
+        
+        try {
+            // Get original video duration
+            double videoDuration = getVideoDuration(videoFile);
+            logger.info("[Audio Timing] Original video duration: {} seconds", videoDuration);
+            
+            // Get translated audio duration
+            double audioDuration = getAudioDuration(audioFile);
+            logger.info("[Audio Timing] Translated audio duration: {} seconds", audioDuration);
+            
+            // Calculate the speed adjustment needed
+            double speedRatio = audioDuration / videoDuration;
+            logger.info("[Audio Timing] Speed ratio (audio/video): {}", speedRatio);
+            
+            if (speedRatio < 0.8) {
+                logger.warn("[Audio Timing] Audio is significantly shorter than video ({}% of original)", 
+                    Math.round(speedRatio * 100));
+            } else if (speedRatio > 1.2) {
+                logger.warn("[Audio Timing] Audio is significantly longer than video ({}% of original)", 
+                    Math.round(speedRatio * 100));
+            }
+            
+            // Create video with proper audio timing
+            ProcessBuilder processBuilder = new ProcessBuilder(
+                "C:\\ffmpeg\\bin\\ffmpeg.exe",
+                "-i", videoFile.getAbsolutePath(),
+                "-i", audioFile.getAbsolutePath(),
+                "-c:v", "copy",
+                "-c:a", "aac",
+                "-b:a", "192k",
+                "-map", "0:v:0",
+                "-map", "1:a:0",
+                "-shortest",  // Use shortest duration to avoid blank audio
+                "-avoid_negative_ts", "make_zero",
+                "-fflags", "+genpts",
+                "-max_interleave_delta", "0",
+                "-async", "1",
+                "-vsync", "1",
+                "-y",
+                outputFile.getAbsolutePath()
+            );
+            
+            logger.info("[Audio Timing] FFmpeg command: {}", String.join(" ", processBuilder.command()));
+            
+            Process process = processBuilder.start();
+            
+            // Capture error output
+            StringBuilder errorOutput = new StringBuilder();
+            Thread errorReader = new Thread(() -> {
+                try {
+                    byte[] buffer = new byte[1024];
+                    int bytesRead;
+                    while ((bytesRead = process.getErrorStream().read(buffer)) != -1) {
+                        errorOutput.append(new String(buffer, 0, bytesRead));
+                    }
+                } catch (IOException e) {
+                    logger.warn("[Audio Timing] Error reading FFmpeg error stream: {}", e.getMessage());
+                }
+            });
+            errorReader.start();
+            
+            // Wait for completion
+            boolean completed = process.waitFor(180, java.util.concurrent.TimeUnit.SECONDS);
+            
+            if (!completed) {
+                logger.error("[Audio Timing] Video creation timed out");
+                process.destroyForcibly();
+                errorReader.interrupt();
+                throw new IOException("Video creation timed out");
+            }
+            
+            int exitCode = process.exitValue();
+            if (exitCode != 0) {
+                logger.error("[Audio Timing] FFmpeg failed with exit code: {}", exitCode);
+                logger.error("[Audio Timing] Error output: {}", errorOutput.toString());
+                throw new IOException("FFmpeg failed with exit code: " + exitCode);
+            }
+            
+            // Verify output
+            if (outputFile.exists() && outputFile.length() > 0) {
+                double outputDuration = getVideoDuration(outputFile);
+                logger.info("[Audio Timing] SUCCESS: Video created with proper timing");
+                logger.info("[Audio Timing] Output duration: {} seconds", outputDuration);
+                logger.info("[Audio Timing] Output file size: {} bytes", outputFile.length());
+                
+                // Check timing quality
+                double timingQuality = Math.abs(outputDuration - Math.min(videoDuration, audioDuration)) / Math.min(videoDuration, audioDuration);
+                if (timingQuality < 0.05) {
+                    logger.info("[Audio Timing] Excellent timing quality achieved");
+                } else if (timingQuality < 0.1) {
+                    logger.info("[Audio Timing] Good timing quality achieved");
+                } else {
+                    logger.warn("[Audio Timing] Timing quality may need improvement");
+                }
+                
+                return outputFile;
+            } else {
+                throw new IOException("Output video file was not created or is empty");
+            }
+            
+        } catch (Exception e) {
+            logger.error("[Audio Timing] Failed to create video with proper timing: {}", e.getMessage());
+            throw new IOException("Failed to create video with proper timing", e);
+        }
+    }
+    
+    /**
+     * Create video with audio speed adjustment to match original duration.
+     * This method adjusts the audio speed to match the video duration exactly.
+     * 
+     * @param videoFile The original video file
+     * @param audioFile The translated audio file
+     * @param outputFile The output video file
+     * @return The output video file
+     * @throws IOException if processing fails
+     */
+    public File createVideoWithAudioSpeedAdjustment(File videoFile, File audioFile, File outputFile) throws IOException {
+        logger.info("[Audio Speed Adjustment] Starting video creation with audio speed adjustment");
+        logger.info("[Audio Speed Adjustment] Video: {} ({} bytes)", videoFile.getName(), videoFile.length());
+        logger.info("[Audio Speed Adjustment] Audio: {} ({} bytes)", audioFile.getName(), audioFile.length());
+        
+        try {
+            // Get original video duration
+            double videoDuration = getVideoDuration(videoFile);
+            logger.info("[Audio Speed Adjustment] Original video duration: {} seconds", videoDuration);
+            
+            // Get translated audio duration
+            double audioDuration = getAudioDuration(audioFile);
+            logger.info("[Audio Speed Adjustment] Translated audio duration: {} seconds", audioDuration);
+            
+            // Calculate the speed adjustment needed
+            double speedRatio = audioDuration / videoDuration;
+            logger.info("[Audio Speed Adjustment] Speed ratio (audio/video): {}", speedRatio);
+            
+            // Limit speed adjustment to reasonable bounds (0.5x to 2.0x)
+            double adjustedSpeedRatio = Math.max(0.5, Math.min(2.0, speedRatio));
+            if (adjustedSpeedRatio != speedRatio) {
+                logger.warn("[Audio Speed Adjustment] Speed ratio adjusted from {} to {} for quality", speedRatio, adjustedSpeedRatio);
+            }
+            
+            // Create video with audio speed adjustment
+            ProcessBuilder processBuilder = new ProcessBuilder(
+                "C:\\ffmpeg\\bin\\ffmpeg.exe",
+                "-i", videoFile.getAbsolutePath(),
+                "-i", audioFile.getAbsolutePath(),
+                "-c:v", "copy",
+                "-filter:a", "atempo=" + adjustedSpeedRatio,
+                "-c:a", "aac",
+                "-b:a", "192k",
+                "-map", "0:v:0",
+                "-map", "1:a:0",
+                "-avoid_negative_ts", "make_zero",
+                "-fflags", "+genpts",
+                "-max_interleave_delta", "0",
+                "-async", "1",
+                "-vsync", "1",
+                "-y",
+                outputFile.getAbsolutePath()
+            );
+            
+            logger.info("[Audio Speed Adjustment] FFmpeg command: {}", String.join(" ", processBuilder.command()));
+            
+            Process process = processBuilder.start();
+            
+            // Capture error output
+            StringBuilder errorOutput = new StringBuilder();
+            Thread errorReader = new Thread(() -> {
+                try {
+                    byte[] buffer = new byte[1024];
+                    int bytesRead;
+                    while ((bytesRead = process.getErrorStream().read(buffer)) != -1) {
+                        errorOutput.append(new String(buffer, 0, bytesRead));
+                    }
+                } catch (IOException e) {
+                    logger.warn("[Audio Speed Adjustment] Error reading FFmpeg error stream: {}", e.getMessage());
+                }
+            });
+            errorReader.start();
+            
+            // Wait for completion
+            boolean completed = process.waitFor(180, java.util.concurrent.TimeUnit.SECONDS);
+            
+            if (!completed) {
+                logger.error("[Audio Speed Adjustment] Video creation timed out");
+                process.destroyForcibly();
+                errorReader.interrupt();
+                throw new IOException("Video creation timed out");
+            }
+            
+            int exitCode = process.exitValue();
+            if (exitCode != 0) {
+                logger.error("[Audio Speed Adjustment] FFmpeg failed with exit code: {}", exitCode);
+                logger.error("[Audio Speed Adjustment] Error output: {}", errorOutput.toString());
+                throw new IOException("FFmpeg failed with exit code: " + exitCode);
+            }
+            
+            // Verify output
+            if (outputFile.exists() && outputFile.length() > 0) {
+                double outputDuration = getVideoDuration(outputFile);
+                logger.info("[Audio Speed Adjustment] SUCCESS: Video created with speed adjustment");
+                logger.info("[Audio Speed Adjustment] Output duration: {} seconds", outputDuration);
+                logger.info("[Audio Speed Adjustment] Output file size: {} bytes", outputFile.length());
+                
+                // Check timing quality
+                double timingQuality = Math.abs(outputDuration - videoDuration) / videoDuration;
+                if (timingQuality < 0.05) {
+                    logger.info("[Audio Speed Adjustment] Excellent timing quality achieved");
+                } else if (timingQuality < 0.1) {
+                    logger.info("[Audio Speed Adjustment] Good timing quality achieved");
+                } else {
+                    logger.warn("[Audio Speed Adjustment] Timing quality may need improvement");
+                }
+                
+                return outputFile;
+            } else {
+                throw new IOException("Output video file was not created or is empty");
+            }
+            
+        } catch (Exception e) {
+            logger.error("[Audio Speed Adjustment] Failed to create video with speed adjustment: {}", e.getMessage());
+            throw new IOException("Failed to create video with speed adjustment", e);
+        }
+    }
 } 

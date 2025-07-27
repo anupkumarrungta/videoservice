@@ -39,8 +39,6 @@ public class TranslationService {
         LANGUAGE_CODES.put("marathi", "mr");
         LANGUAGE_CODES.put("gujarati", "gu");
         LANGUAGE_CODES.put("punjabi", "pa");
-        LANGUAGE_CODES.put("odia", "or");
-        LANGUAGE_CODES.put("assamese", "as");
         LANGUAGE_CODES.put("urdu", "ur");
         
         // Other Languages
@@ -76,16 +74,24 @@ public class TranslationService {
         logger.info("[Translation Service] Source text: {}", text);
         
         try {
+            // Validate language support first
+            String sourceCode = getLanguageCode(sourceLanguage);
+            String targetCode = getLanguageCode(targetLanguage);
+            
+            if (sourceCode == null) {
+                throw new TranslationException("Unsupported source language: " + sourceLanguage);
+            }
+            if (targetCode == null) {
+                throw new TranslationException("Unsupported target language: " + targetLanguage);
+            }
+            
+            logger.info("[Translation Service] Language codes - Source: {}, Target: {}", sourceCode, targetCode);
+            
             // If text is too long, chunk it into smaller pieces
             if (text.length() > 5000) {
                 logger.info("[Translation Service] Text is too long ({} chars), chunking for translation", text.length());
                 return translateLongText(text, sourceLanguage, targetLanguage);
             }
-            
-            String sourceCode = getLanguageCode(sourceLanguage);
-            String targetCode = getLanguageCode(targetLanguage);
-            
-            logger.info("[Translation Service] Language codes - Source: {}, Target: {}", sourceCode, targetCode);
             
             // Check if the language pair is directly supported
             if (!isLanguagePairSupported(sourceLanguage, targetLanguage)) {
@@ -326,8 +332,8 @@ public class TranslationService {
     private String getLanguageCode(String languageName) {
         String code = LANGUAGE_CODES.get(languageName.toLowerCase());
         if (code == null) {
-            logger.warn("Unknown language: {}, using default", languageName);
-            return defaultSourceLanguage;
+            logger.warn("Unsupported language: {}", languageName);
+            return null; // Return null for unsupported languages
         }
         return code;
     }
@@ -353,7 +359,7 @@ public class TranslationService {
      * @return The detected language code
      */
     private String detectLanguageHeuristic(String text) {
-        // Simple character-based detection
+        // Enhanced character-based detection for Indian languages
         if (text.matches(".*[\\u0600-\\u06FF\\u0750-\\u077F\\u08A0-\\u08FF\\uFB50-\\uFDFF\\uFE70-\\uFEFF].*")) {
             return "ar"; // Arabic
         } else if (text.matches(".*[\\u3040-\\u309F\\u30A0-\\u30FF\\u4E00-\\u9FAF].*")) {
@@ -362,10 +368,33 @@ public class TranslationService {
             return "ko"; // Korean
         } else if (text.matches(".*[\\u0B80-\\u0BFF].*")) {
             return "ta"; // Tamil
+        } else if (text.matches(".*[\\u0C00-\\u0C7F].*")) {
+            return "te"; // Telugu
+        } else if (text.matches(".*[\\u0C80-\\u0CFF].*")) {
+            return "kn"; // Kannada
+        } else if (text.matches(".*[\\u0D00-\\u0D7F].*")) {
+            return "ml"; // Malayalam
+        } else if (text.matches(".*[\\u0980-\\u09FF].*")) {
+            return "bn"; // Bengali
+        } else if (text.matches(".*[\\u0A80-\\u0AFF].*")) {
+            return "gu"; // Gujarati
+        } else if (text.matches(".*[\\u0A00-\\u0A7F].*")) {
+            return "pa"; // Punjabi (Gurmukhi)
         } else if (text.matches(".*[\\u0900-\\u097F].*")) {
-            return "hi"; // Hindi
+            return "hi"; // Hindi/Devanagari (covers Hindi, Marathi, etc.)
+        } else if (text.matches(".*[\\u0620-\\u063F\\u0641-\\u064A\\u0660-\\u0669].*")) {
+            return "ur"; // Urdu
         } else {
-            return "en"; // Default to English
+            // Check for common English words and patterns
+            String lowerText = text.toLowerCase();
+            if (lowerText.matches(".*\\b(the|and|or|but|in|on|at|to|for|of|with|by|is|are|was|were|be|been|being|have|has|had|do|does|did|will|would|could|should|may|might|can|must|shall)\\b.*")) {
+                return "en"; // English
+            } else {
+                // If no clear pattern, default to English but log for analysis
+                logger.warn("[Language Detection] No clear language pattern detected, defaulting to English. Text sample: {}", 
+                           text.length() > 50 ? text.substring(0, 50) + "..." : text);
+                return "en"; // Default to English
+            }
         }
     }
     
@@ -480,7 +509,11 @@ public class TranslationService {
             
         } catch (TranslateException e) {
             logger.error("[Translation Service] Fallback translation failed: {}", e.getMessage());
-            throw new TranslationException("Fallback translation via English failed", e);
+            if (e.getMessage().contains("UnsupportedLanguagePairException")) {
+                throw new TranslationException("Language pair not supported by AWS Translate: " + sourceLanguage + " to " + targetLanguage, e);
+            } else {
+                throw new TranslationException("Fallback translation via English failed: " + e.getMessage(), e);
+            }
         }
     }
 } 

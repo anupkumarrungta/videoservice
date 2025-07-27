@@ -575,12 +575,48 @@ public class TranscriptionService {
      */
     public String getLanguageCode(String language) {
         switch (language.toLowerCase()) {
-            case "hindi":
-            case "hi":
-                return "hi-IN";
+            // Auto detection - use AWS Transcribe's auto-detection
+            case "auto":
+                return "auto";
+                
+            // English
             case "english":
             case "en":
                 return "en-US";
+                
+            // Indian Languages
+            case "hindi":
+            case "hi":
+                return "hi-IN";
+            case "tamil":
+            case "ta":
+                return "ta-IN";
+            case "telugu":
+            case "te":
+                return "te-IN";
+            case "kannada":
+            case "kn":
+                return "kn-IN";
+            case "malayalam":
+            case "ml":
+                return "ml-IN";
+            case "bengali":
+            case "bn":
+                return "bn-IN";
+            case "marathi":
+            case "mr":
+                return "mr-IN";
+            case "gujarati":
+            case "gu":
+                return "gu-IN";
+            case "punjabi":
+            case "pa":
+                return "pa-IN";
+            case "urdu":
+            case "ur":
+                return "ur-IN";
+                
+            // Other Languages
             case "spanish":
             case "es":
                 return "es-US";
@@ -599,8 +635,14 @@ public class TranscriptionService {
             case "korean":
             case "ko":
                 return "ko-KR";
+            case "arabic":
+            case "ar":
+                return "ar-SA";
+                
+            // Default to auto-detection for unknown languages
             default:
-                return "en-US";
+                logger.warn("[Transcription] Unknown language '{}', using auto-detection", language);
+                return "auto";
         }
     }
     

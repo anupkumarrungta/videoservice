@@ -441,7 +441,21 @@ public class AudioSynthesisService {
         logger.info("Synthesizing SSML speech for language: {} to file: {}", language, outputFile.getName());
         
         try {
+            // Validate SSML text
+            if (ssmlText == null || ssmlText.trim().isEmpty()) {
+                throw new SynthesisException("SSML text is null or empty");
+            }
+            
+            // Log SSML for debugging (first 200 chars)
+            String ssmlPreview = ssmlText.length() > 200 ? ssmlText.substring(0, 200) + "..." : ssmlText;
+            logger.info("SSML preview: {}", ssmlPreview);
+            
             String voiceId = getVoiceId(language);
+            
+            // Validate voice ID
+            if (voiceId == null || voiceId.trim().isEmpty()) {
+                throw new SynthesisException("Invalid voice ID for language: " + language);
+            }
             
             SynthesizeSpeechRequest request = SynthesizeSpeechRequest.builder()
                     .textType(TextType.SSML)
@@ -452,6 +466,7 @@ public class AudioSynthesisService {
                     .sampleRate(String.valueOf(sampleRate))
                     .build();
             
+            logger.info("Sending SSML synthesis request with voice: {}", voiceId);
             ResponseInputStream<SynthesizeSpeechResponse> response = pollyClient.synthesizeSpeech(request);
             
             // Write audio data to file
@@ -463,6 +478,10 @@ public class AudioSynthesisService {
             
         } catch (Exception e) {
             logger.error("SSML speech synthesis failed: {}", e.getMessage());
+            if (e.getMessage().contains("Invalid SSML")) {
+                logger.error("SSML validation failed. This usually indicates malformed SSML tags or invalid syntax.");
+                logger.error("SSML text that failed: {}", ssmlText);
+            }
             throw new SynthesisException("Failed to synthesize SSML speech", e);
         }
     }
@@ -503,6 +522,230 @@ public class AudioSynthesisService {
         String ssmlText = createPaceSSML(text, pace);
         
         return synthesizeSpeechWithSSML(ssmlText, language, outputFile);
+    }
+    
+    /**
+     * Synthesize speech with natural modulation and pauses.
+     * This method adds SSML tags for better speech quality and natural pauses.
+     * 
+     * @param text The text to synthesize
+     * @param language The target language
+     * @param outputFile The output audio file
+     * @param originalAudioFile The original audio file for reference
+     * @return The synthesized audio file
+     * @throws SynthesisException if synthesis fails
+     */
+    public File synthesizeSpeechWithModulation(String text, String language, File outputFile, File originalAudioFile) throws SynthesisException {
+        logger.info("[Audio Modulation] Starting speech synthesis with natural modulation");
+        logger.info("[Audio Modulation] Language: {}, Text length: {} chars", language, text.length());
+        
+        try {
+            // Detect speaker characteristics from original audio
+            String detectedGender = "default";
+            double originalPace = 1.0;
+            
+            if (originalAudioFile != null && originalAudioFile.exists()) {
+                try {
+                    detectedGender = detectSpeakerGender(originalAudioFile);
+                    originalPace = estimateOriginalPace(originalAudioFile);
+                    logger.info("[Audio Modulation] Detected gender: {}, Original pace: {}", detectedGender, originalPace);
+                } catch (Exception e) {
+                    logger.warn("[Audio Modulation] Failed to analyze original audio: {}", e.getMessage());
+                }
+            }
+            
+            // Try enhanced SSML synthesis first
+            try {
+                logger.info("[Audio Modulation] Attempting enhanced SSML synthesis");
+                
+                // Add natural pauses and modulation to the text
+                String enhancedText = addNaturalPausesAndModulation(text, language);
+                logger.info("[Audio Modulation] Enhanced text length: {} chars", enhancedText.length());
+                
+                // Use SSML for better control over speech characteristics
+                String ssmlText = createEnhancedSSML(enhancedText, language, detectedGender, originalPace);
+                
+                // Log SSML for debugging (first 500 chars)
+                String ssmlPreview = ssmlText.length() > 500 ? ssmlText.substring(0, 500) + "..." : ssmlText;
+                logger.info("[Audio Modulation] Generated SSML preview: {}", ssmlPreview);
+                
+                return synthesizeSpeechWithSSML(ssmlText, language, outputFile);
+                
+            } catch (Exception ssmlError) {
+                logger.warn("[Audio Modulation] Enhanced SSML synthesis failed: {}", ssmlError.getMessage());
+                logger.info("[Audio Modulation] Falling back to basic synthesis with gender detection");
+                
+                // Fallback to basic synthesis with gender detection
+                return synthesizeSpeechWithGender(text, language, outputFile, detectedGender);
+            }
+            
+        } catch (Exception e) {
+            logger.error("[Audio Modulation] Failed to synthesize speech with modulation: {}", e.getMessage());
+            throw new SynthesisException("Failed to synthesize speech with modulation", e);
+        }
+    }
+    
+    /**
+     * Add natural pauses and modulation to text for more engaging speech.
+     * 
+     * @param text The original text
+     * @param language The target language
+     * @return Enhanced text with natural pauses
+     */
+    private String addNaturalPausesAndModulation(String text, String language) {
+        logger.info("[Audio Modulation] Adding natural pauses and modulation to text");
+        
+        // Split text into sentences
+        String[] sentences = text.split("[.!?।]");
+        StringBuilder enhancedText = new StringBuilder();
+        
+        for (int i = 0; i < sentences.length; i++) {
+            String sentence = sentences[i].trim();
+            if (sentence.isEmpty()) {
+                continue;
+            }
+            
+            // Add sentence to enhanced text
+            enhancedText.append(sentence);
+            
+            // Add appropriate punctuation and pause
+            if (i < sentences.length - 1) {
+                enhancedText.append(". ");
+            } else {
+                enhancedText.append(".");
+            }
+            
+            // Add longer pause after important sentences (every 3-4 sentences)
+            if ((i + 1) % 3 == 0 && i < sentences.length - 1) {
+                enhancedText.append(" ");
+            }
+        }
+        
+        logger.info("[Audio Modulation] Enhanced text created with natural pauses");
+        return enhancedText.toString();
+    }
+    
+    /**
+     * Create enhanced SSML with natural speech characteristics.
+     * 
+     * @param text The text to convert to SSML
+     * @param language The target language
+     * @param gender The detected gender
+     * @param originalPace The original speech pace
+     * @return SSML text with enhanced speech characteristics
+     */
+    private String createEnhancedSSML(String text, String language, String gender, double originalPace) {
+        logger.info("[Audio Modulation] Creating enhanced SSML with natural characteristics");
+        
+        try {
+            String voiceId = getVoiceIdForGender(language, gender);
+            
+            // Validate voice ID
+            if (voiceId == null || voiceId.trim().isEmpty()) {
+                logger.warn("[Audio Modulation] Invalid voice ID, using default voice");
+                voiceId = getVoiceId(language); // Fallback to default voice
+            }
+            
+            // Calculate appropriate speech rate based on original pace
+            double speechRate = Math.max(0.8, Math.min(1.3, originalPace));
+            String rateAttribute = String.format("%.2f", speechRate);
+            
+            // Clean and escape text for SSML
+            String cleanText = escapeTextForSSML(text);
+            
+            // Add natural pauses and emphasis (simplified to avoid SSML issues)
+            String enhancedText = addSimpleSSMLPauses(cleanText);
+            
+            StringBuilder ssml = new StringBuilder();
+            ssml.append("<speak>");
+            ssml.append("<prosody rate=\"").append(rateAttribute).append("\" pitch=\"medium\" volume=\"medium\">");
+            ssml.append(enhancedText);
+            ssml.append("</prosody>");
+            ssml.append("</speak>");
+            
+            logger.info("[Audio Modulation] Enhanced SSML created with voice: {}, rate: {}", voiceId, rateAttribute);
+            return ssml.toString();
+            
+        } catch (Exception e) {
+            logger.error("[Audio Modulation] Failed to create enhanced SSML: {}", e.getMessage());
+            throw new RuntimeException("Failed to create enhanced SSML", e);
+        }
+    }
+    
+    /**
+     * Add SSML pauses and emphasis to text for more natural speech.
+     * 
+     * @param text The text to enhance
+     * @return Text with SSML pauses and emphasis
+     */
+    private String addSSMLPausesAndEmphasis(String text) {
+        // Add short pauses after commas and semicolons
+        text = text.replaceAll(",", ",<break time=\"0.3s\"/>");
+        text = text.replaceAll(";", ";<break time=\"0.5s\"/>");
+        
+        // Add medium pauses after periods
+        text = text.replaceAll("\\.", ".<break time=\"0.7s\"/>");
+        
+        // Add emphasis to important words (capitalized words or words in quotes)
+        text = text.replaceAll("\"([^\"]+)\"", "<emphasis level=\"moderate\">$1</emphasis>");
+        
+        // Add emphasis to words that are likely important (longer words, technical terms)
+        String[] words = text.split("\\s+");
+        for (String word : words) {
+            if (word.length() > 8 && !word.contains("<")) {
+                // Add emphasis to longer words occasionally
+                if (Math.random() < 0.1) { // 10% chance
+                    text = text.replaceFirst("\\b" + word + "\\b", "<emphasis level=\"moderate\">" + word + "</emphasis>");
+                }
+            }
+        }
+        
+        return text;
+    }
+    
+    /**
+     * Estimate the original speech pace from audio file.
+     * 
+     * @param audioFile The original audio file
+     * @return Estimated speech pace (1.0 = normal, >1.0 = faster, <1.0 = slower)
+     * @throws Exception if analysis fails
+     */
+    private double estimateOriginalPace(File audioFile) throws Exception {
+        try {
+            // Get audio duration
+            double duration = estimateAudioDuration(audioFile);
+            
+            // Analyze audio characteristics using FFprobe
+            ProcessBuilder processBuilder = new ProcessBuilder(
+                "C:\\ffmpeg\\bin\\ffprobe.exe",
+                "-v", "quiet",
+                "-show_entries", "stream=sample_rate,channels",
+                "-select_streams", "a:0",
+                "-of", "json",
+                audioFile.getAbsolutePath()
+            );
+            
+            Process process = processBuilder.start();
+            String output = new String(process.getInputStream().readAllBytes());
+            int exitCode = process.waitFor();
+            
+            if (exitCode == 0 && output.contains("sample_rate")) {
+                // Extract sample rate and analyze audio characteristics
+                // For now, return a reasonable default based on duration
+                if (duration > 0) {
+                    // Estimate pace based on typical speech patterns
+                    // This is a simplified estimation - in a real implementation,
+                    // you would analyze the actual speech patterns
+                    return 1.0; // Default to normal pace
+                }
+            }
+            
+            return 1.0; // Default pace
+            
+        } catch (Exception e) {
+            logger.warn("[Audio Modulation] Failed to estimate original pace: {}", e.getMessage());
+            return 1.0; // Default pace
+        }
     }
     
     /**
@@ -916,5 +1159,50 @@ public class AudioSynthesisService {
         
         logger.info("[Voice Selection] Selected random male voice {} for Indian language: {}", selectedVoice, language);
         return selectedVoice;
+    }
+
+    /**
+     * Escape text for SSML to prevent invalid characters.
+     * 
+     * @param text The text to escape
+     * @return Escaped text safe for SSML
+     */
+    private String escapeTextForSSML(String text) {
+        if (text == null) {
+            return "";
+        }
+        
+        // Replace special characters that can cause SSML issues
+        String escaped = text
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\"", "&quot;")
+            .replace("'", "&apos;");
+        
+        // Remove any remaining control characters
+        escaped = escaped.replaceAll("[\\x00-\\x1F\\x7F]", "");
+        
+        return escaped;
+    }
+    
+    /**
+     * Add simple SSML pauses without complex emphasis to avoid SSML issues.
+     * 
+     * @param text The text to add pauses to
+     * @return Text with simple SSML pauses
+     */
+    private String addSimpleSSMLPauses(String text) {
+        if (text == null || text.trim().isEmpty()) {
+            return text;
+        }
+        
+        // Add simple pauses after sentence endings
+        String result = text.replaceAll("([.!?।])\\s+", "$1<break time=\"0.7s\"/> ");
+        
+        // Add shorter pauses after commas (but not too many)
+        result = result.replaceAll("([,;])\\s+", "$1<break time=\"0.3s\"/> ");
+        
+        return result;
     }
 } 

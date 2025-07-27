@@ -235,8 +235,21 @@ public class JobManager {
                     logger.warn("[Translation Pipeline] Source language: {}, Language code: {}", job.getSourceLanguage(), sourceLanguageCode);
                 }
                 
+                // Detect source language if auto-detection is enabled
+                String actualSourceLanguage = job.getSourceLanguage();
+                if ("auto".equalsIgnoreCase(actualSourceLanguage)) {
+                    try {
+                        String detectedLanguageCode = translationService.detectLanguage(transcribedText);
+                        actualSourceLanguage = translationService.getLanguageName(detectedLanguageCode);
+                        logger.info("[Translation Pipeline] Auto-detected source language: {} (code: {})", actualSourceLanguage, detectedLanguageCode);
+                    } catch (Exception e) {
+                        logger.warn("[Translation Pipeline] Language detection failed, using English as fallback: {}", e.getMessage());
+                        actualSourceLanguage = "english";
+                    }
+                }
+                
                 // Translate text
-                String translatedText = translationService.translateText(transcribedText, job.getSourceLanguage(), targetLanguage);
+                String translatedText = translationService.translateText(transcribedText, actualSourceLanguage, targetLanguage);
                 logger.info("[Translation Pipeline] English translation for chunk {}: {}", i, translatedText);
                 
                 // Synthesize speech from translated text with gender detection
@@ -246,8 +259,8 @@ public class JobManager {
                 logger.info("[Translation Pipeline] Target language for synthesis: {}", targetLanguage);
                 logger.info("[Translation Pipeline] Voice ID being used: {}", getVoiceIdForLanguage(targetLanguage));
                 
-                // Use gender-aware synthesis by passing the original audio chunk for gender detection
-                audioSynthesisService.synthesizeSpeech(translatedText, targetLanguage, translatedAudioChunk, audioChunk);
+                // Use enhanced synthesis with modulation by passing the original audio chunk for analysis
+                audioSynthesisService.synthesizeSpeechWithModulation(translatedText, targetLanguage, translatedAudioChunk, audioChunk);
                 
                 // Verify the translated audio chunk was created
                 if (translatedAudioChunk.exists() && translatedAudioChunk.length() > 0) {
@@ -322,9 +335,28 @@ public class JobManager {
             logger.info("[Translation Pipeline] Number of audio chunks processed: {}", audioChunks.size());
             logger.info("[Translation Pipeline] Number of translated audio chunks: {}", translatedAudioChunks.size());
             
-            // Create new video with translated audio using lip-sync enhancement
-            logger.info("[Translation Pipeline] Using lip-sync enhancement for better audio-video synchronization");
-            videoProcessingService.createVideoWithLipSyncEnhancement(originalFile, translatedAudioFile, translatedVideoFile);
+            // Create new video with translated audio using enhanced timing methods
+            logger.info("[Translation Pipeline] Using enhanced video creation for better audio-video synchronization");
+            
+            // Try different video creation methods based on audio timing
+            try {
+                // First, try with proper audio timing
+                logger.info("[Translation Pipeline] Attempting video creation with proper audio timing");
+                videoProcessingService.createVideoWithProperAudioTiming(originalFile, translatedAudioFile, translatedVideoFile);
+                logger.info("[Translation Pipeline] Successfully created video with proper audio timing");
+            } catch (Exception e) {
+                logger.warn("[Translation Pipeline] Proper audio timing failed, trying speed adjustment: {}", e.getMessage());
+                try {
+                    // Fallback to audio speed adjustment
+                    videoProcessingService.createVideoWithAudioSpeedAdjustment(originalFile, translatedAudioFile, translatedVideoFile);
+                    logger.info("[Translation Pipeline] Successfully created video with audio speed adjustment");
+                } catch (Exception e2) {
+                    logger.warn("[Translation Pipeline] Speed adjustment failed, using lip-sync enhancement: {}", e2.getMessage());
+                    // Final fallback to lip-sync enhancement
+                    videoProcessingService.createVideoWithLipSyncEnhancement(originalFile, translatedAudioFile, translatedVideoFile);
+                    logger.info("[Translation Pipeline] Successfully created video with lip-sync enhancement");
+                }
+            }
             
             // Verify the output video was created
             if (!translatedVideoFile.exists() || translatedVideoFile.length() == 0) {
@@ -423,9 +455,22 @@ public class JobManager {
                     logger.warn("[Translation Pipeline] Source language: {}, Language code: {}", job.getSourceLanguage(), sourceLanguageCode);
                 }
                 
+                // Detect source language if auto-detection is enabled
+                String actualSourceLanguage = job.getSourceLanguage();
+                if ("auto".equalsIgnoreCase(actualSourceLanguage)) {
+                    try {
+                        String detectedLanguageCode = translationService.detectLanguage(transcribedText);
+                        actualSourceLanguage = translationService.getLanguageName(detectedLanguageCode);
+                        logger.info("[Translation Pipeline] Auto-detected source language: {} (code: {})", actualSourceLanguage, detectedLanguageCode);
+                    } catch (Exception e) {
+                        logger.warn("[Translation Pipeline] Language detection failed, using English as fallback: {}", e.getMessage());
+                        actualSourceLanguage = "english";
+                    }
+                }
+                
                 // Translate text
                 String translatedText = translationService.translateText(
-                    transcribedText, job.getSourceLanguage(), targetLanguage);
+                    transcribedText, actualSourceLanguage, targetLanguage);
                 logger.info("[Translation Pipeline] English translation for chunk {}: {}", i, translatedText);
                 
                 // Synthesize speech from translated text
